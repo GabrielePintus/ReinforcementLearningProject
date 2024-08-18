@@ -38,6 +38,7 @@ class MarketMakerEnv(gym.Env):
         })
 
         self.action_space = gym.spaces.Dict({
+            # Manca order side?
             # 0: Ask, 1: Bid
             'order_size': gym.spaces.MultiDiscrete([MarketMakerEnv.MAX_ORDER_SIZE, MarketMakerEnv.MAX_ORDER_SIZE]), # Sampling di coppie di interi dall'intervallo [0,999]
             'theta': gym.spaces.MultiDiscrete([2,10]), # Sampling di due interi dall'intervallo [0,9] 
