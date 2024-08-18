@@ -8,8 +8,9 @@ import numpy as np
 
 class MarketMakerEnv(gym.Env):
 
-    MAX_ORDER_SIZE = 1000
+    MAX_ORDER_SIZE = 1e3
     MAX_INVENTORY  = 10000.0
+    MAX_VALUE = 1e7
 
     ACTIONS_0_8 = np.array([
         [1,1],
@@ -21,25 +22,27 @@ class MarketMakerEnv(gym.Env):
         [3,1],
         [2,5],
         [5,2],
+        [0,0] # Action 9
     ])
 
-    #ACTION_9 = ? #TODO
 
     def __init__(self, lob_data: np.array, feature_extractor: callable):
         self.lob_depth = lob_data.shape[1]
         self.lob_data = lob_data
         self.feature_extractor = feature_extractor
+
         # Agent's internal state
         self.inventory = 0
 
         self.observation_space = gym.spaces.Dict({
-            'order_book': gym.spaces.Box( low = 0 , high=float("inf"), shape=(self.lob_depth*2, 4)   , dtype=float ),
+            'order_book' : gym.spaces.MultiDiscrete(np.full((self.lob_depth*2,4)*MarketMakerEnv.MAX_VALUE)),
+            
         })
 
         self.action_space = gym.spaces.Dict({
             # 0: Ask, 1: Bid
-            'order_size': gym.spaces.Box(low=0, high=MarketMakerEnv.MAX_ORDER_SIZE, shape=(2,), dtype=int),
-            'theta': gym.spaces.Box(low=0, high=9, shape=(1,), dtype=int),
+            'order_size': gym.spaces.MultiDiscrete([MarketMakerEnv.MAX_ORDER_SIZE, MarketMakerEnv.MAX_ORDER_SIZE]), # Sampling di coppie di interi dall'intervallo [0,999]
+            'theta': gym.spaces.Discrete(10), # Sampling di interi dall'intervallo [0,9] 
         })
 
     def reset(self):
@@ -127,14 +130,7 @@ class MarketMakerEnv(gym.Env):
             done = True
 
         return next_state, reward, done, {}
-        
-
-
-
-
-
-        
-        
+    
 
 
     def render(self, mode='human'):
@@ -142,4 +138,5 @@ class MarketMakerEnv(gym.Env):
 
     def close(self):
         pass
+
 
