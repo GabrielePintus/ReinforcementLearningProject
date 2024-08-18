@@ -4,8 +4,6 @@ import numpy as np
 
 
 
-
-
 class MarketMakerEnv(gym.Env):
 
     MAX_ORDER_SIZE = 1e3
@@ -29,7 +27,7 @@ class MarketMakerEnv(gym.Env):
     def __init__(self, lob_data: np.array, feature_extractor: callable):
         self.lob_depth = lob_data.shape[1]
         self.lob_data = lob_data
-        self.feature_extractor = feature_extractor
+        self.feature_extractor = feature_extractor # to do
 
         # Agent's internal state
         self.inventory = 0
@@ -42,60 +40,114 @@ class MarketMakerEnv(gym.Env):
         self.action_space = gym.spaces.Dict({
             # 0: Ask, 1: Bid
             'order_size': gym.spaces.MultiDiscrete([MarketMakerEnv.MAX_ORDER_SIZE, MarketMakerEnv.MAX_ORDER_SIZE]), # Sampling di coppie di interi dall'intervallo [0,999]
-            'theta': gym.spaces.Discrete(10), # Sampling di interi dall'intervallo [0,9] 
+            'theta': gym.spaces.MultiDiscrete([2,10]), # Sampling di due interi dall'intervallo [0,9] 
         })
 
+
+    
+    """
+    Reset the environment to the initial state.
+    Returns:
+        dict: The initial observation of the environment
+    """
     def reset(self):
         self.t = 0
         self.inventory = 0
         return self._get_obs()
-
+    
+    
+    """
+    Get the current observation of the market making agent.
+    Returns:
+        dict: A dictionary containing the following observations:
+            - 'order_book': The current order book observation.
+            - 'features': Extracted features from the order book observation.
+            - 'inventory': The current inventory as a numpy array.
+    """
     def _get_obs(self):
+
         lob_obs = self.lob_data[self.t,:]
-        features_obs = self.feature_extractor(lob_obs)
-        return {
-            'order_book': lob_obs,
-            'features': features_obs,
-            'inventory': np.array([self.inventory], dtype=float)
-        }
-
-    # Simple PnL
-    def reward(self, prev_state, action, next_state):
-        reward = 0
-
-        # Change in the mid price
-        prev_mid_price = prev_state['features'][0]
-        next_mid_price = next_state['features'][0]        
         
-        # Change in the value of the inventory
-        next_inventory = next_state['inventory']
-        diff_inventory = ( next_mid_price - prev_mid_price ) * next_inventory
-        reward += diff_inventory
+        features_obs = self.feature_extractor(lob_obs)
+        
+        return {
+            'order_book': lob_obs,  
+            'features': features_obs,  
+            'inventory': np.array([self.inventory], dtype=int)  
+        }
+    
+    """
+    Compute the reward given the previous state, the action taken and the current state.
+    Args:
+        prev_state (dict): The previous state of the environment.
+        action (dict): The action taken by the agent.
+        current_state (dict): The current state of the environment.
+    Returns:
+        float: The reward value.
+    """
+
+    def AgentCashHolding(self, prev_state, current_state):
+        prev_mid_price = prev_state['features'][0]
+        current_mid_price = current_state['features'][0]   
+
+        current_inventory = current_state['inventory']
+        diff_inventory = current_mid_price - prev_mid_price 
+
+        return (diff_inventory * current_inventory)
+    
+    
+    def PnL_reward(self, prev_state, action, current_state):
+
+        reward = AgentCashHolding(prev_state, current_state)
 
         # Profit derived from order execution
+        # 0.) Ask Price 1: 	Level 1 Ask Price 	(Best Ask)
+	    # 1.) Ask Size 1: 	Level 1 Ask Volume 	(Best Ask Volume)
+	    # 2.) Bid Price 1: 	Level 1 Bid Price 	(Best Bid)
+	    # 3.) Bid Size 1: 	Level 1 Bid Volume 	(Best Bid Volume)
+
+        # ISSUE: dalle formule per psi_a e psi_b abbiamo che Matched_a e Matched_b sono:
+        # "Amount of volume matched (executed) against the agentìs orders since the last time t_{i-1}"
+        # psi_a = Matched_a(t_i) * ( p_a(t_i) - m(t_i))     
+        # psi_b = Matched_b(t_i) * ( m(t_i) - p_b(t_i))
+        # Quindi Matched_a e Matched_b NON sono necessariamente uguali a order_size[0] e order_size[1] ?
+        
+
+        # Da controllare se book_ask e book_bid sono i valori corretti da scegliere e se servono
+        current_mid_price = current_state['feature'][0]
         order_size = action['order_size']
-        p_a = next_state['order_book'][0]
-        p_b = next_state['order_book'][2]
-        psi_a = order_size[0] * ( p_a - next_mid_price )
-        psi_b = order_size[1] * ( next_mid_price - p_b )
+        theta = action['order_side']
+
+        book_a = current_state['order_book'][0]
+        book_b = current_state['order_book'][2]
+
+        spread = book_b - book_a
+        dist = spread/2 * theta * np.array([1,-1]) # bid has to be under mid-price and ask above)ù
+
+        # current_state['feature'][0] non è gia il mid price?
+        # agent_ab = np.mean([book_a, book_b]) + dist
+        agent_ab = current_mid_price + dist
+
+        psi_a = order_size[0] * ( agent_ab[0] - current_mid_price )
+        psi_b = order_size[1] * ( current_mid_price - agent_ab[1] )
         reward += psi_a + psi_b
 
         return reward
 
+    def Sym_dampened_PnL_reward(self, prev_state, action, current_state, eta):
+        return (PnL_reward(prev_state, action, current_state) - eta * AgentCashHolding(prev_state, current_state))
 
+
+    def Asym_dampened_PnL_reward(self, prev_state, action, current_state, eta):
+        return (PnL_reward(prev_state, action, current_state) - np.max(0,eta * AgentCashHolding(prev_state, current_state)))
+    
 
     # Given a state and an action, return the next state
     def transition(self, current_state, action):
         next_state = current_state.copy()
         order_size = action['order_size']
         theta = action['order_side']
-
-        # Bid-Ask spread
-        p_a = current_state['order_book'][0]
-        p_b = current_state['order_book'][2]
-        spread = p_b - p_a
-        dist = spread/2 * theta * np.array([1,-1]) # bid has to be under mid-price and ask above)
-        p_ab = np.mean([p_a, p_b]) + dist        
+ 
 
         # Place order
         if order_side == 0:
