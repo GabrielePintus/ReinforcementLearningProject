@@ -23,6 +23,8 @@ class MarketMakerEnv(gym.Env):
         [5,2],
     ])
 
+    #ACTION_9 = ? #TODO
+
     def __init__(self, lob_data: np.array, feature_extractor: callable):
         self.lob_depth = lob_data.shape[1]
         self.lob_data = lob_data
@@ -89,7 +91,7 @@ class MarketMakerEnv(gym.Env):
         p_a = current_state['order_book'][0]
         p_b = current_state['order_book'][2]
         spread = p_b - p_a
-        dist = spread/2 * theta * np.array([-1,1])
+        dist = spread/2 * theta * np.array([1,-1]) # bid has to be under mid-price and ask above)
         p_ab = np.mean([p_a, p_b]) + dist        
 
         # Place order
