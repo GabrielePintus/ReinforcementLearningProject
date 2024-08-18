@@ -1,0 +1,10 @@
+name: marketmakers
+dependencies:
+  - python = 3.12
+  - jupyter
+  - pandas
+  - numpy
+  - matplotlib
+  - pip
+  - pip:
+        - gym
