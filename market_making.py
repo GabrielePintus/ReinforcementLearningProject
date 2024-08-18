@@ -3,6 +3,9 @@ import gym.spaces
 import numpy as np
 
 
+# Ha senso che la classe environment del problema contenga cose legate allo stato interno dell'agente (tipo inventory) o dovrebbero essere gestite dall'agente stesso?
+
+# Da provare a guardare https://github.com/openai/gym/tree/master/gym/envs/classic_control/assets e prendere ispirtazione da come sono fatti gli environment di esempio
 
 class MarketMakerEnv(gym.Env):
 
@@ -38,10 +41,10 @@ class MarketMakerEnv(gym.Env):
         })
 
         self.action_space = gym.spaces.Dict({
-            # Manca order side?
+            # Manca order side?5
             # 0: Ask, 1: Bid
             'order_size': gym.spaces.MultiDiscrete([MarketMakerEnv.MAX_ORDER_SIZE, MarketMakerEnv.MAX_ORDER_SIZE]), # Sampling di coppie di interi dall'intervallo [0,999]
-            'theta': gym.spaces.MultiDiscrete([2,10]), # Sampling di due interi dall'intervallo [0,9] 
+            'theta': gym.spaces.Discrete(9), # Sampling di due interi dall'intervallo [0,9] 
         })
 
 
@@ -57,14 +60,8 @@ class MarketMakerEnv(gym.Env):
         return self._get_obs()
     
     
-    """
-    Get the current observation of the market making agent.
-    Returns:
-        dict: A dictionary containing the following observations:
-            - 'order_book': The current order book observation.
-            - 'features': Extracted features from the order book observation.
-            - 'inventory': The current inventory as a numpy array.
-    """
+    # Forse dovrebbe estrarre le info non direttamente dal dataset ma da una classe/oggetto "stato" che contiene sia le info del book che le varie features?
+
     def _get_obs(self):
 
         lob_obs = self.lob_data[self.t,:]
@@ -77,15 +74,24 @@ class MarketMakerEnv(gym.Env):
             'inventory': np.array([self.inventory], dtype=int)  
         }
     
-    """
-    Compute the reward given the previous state, the action taken and the current state.
-    Args:
-        prev_state (dict): The previous state of the environment.
-        action (dict): The action taken by the agent.
-        current_state (dict): The current state of the environment.
-    Returns:
-        float: The reward value.
-    """
+
+    def feature_extractor(self, lob_obs):
+
+        feature = []
+
+        # Diverse di queste feature fanno riferimento a quantità che evolvono nel tempo ma sono inerenti a singoli stati
+        
+        mid_price = (lob_obs[0] + lob_obs[2]) / 2
+        market_spread = lob_obs[2] - lob_obs[0]
+        mid_price_move = # to be completed
+        book_imbalance = (lob_obs[3] - lob_obs[1])/(lob_obs[3] + lob_obs[1]) # (v_bid - v_ask) / (v_bid + v_ask)
+        signed_volume = lob_obs[3] - lob_obs[1] # v_bid - v_ask
+        volatility = # to be completed
+        relative_strength_index = # to be completed
+
+
+
+
 
     def AgentCashHolding(self, prev_state, current_state):
         prev_mid_price = prev_state['features'][0]

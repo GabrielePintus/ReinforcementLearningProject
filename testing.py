@@ -28,6 +28,6 @@ print("Order size test: ", test_2.sample())
 
 # Theta test
 
-test_3 = gym.spaces.MultiDiscrete([2,10])
+test_3 = gym.spaces.Discrete(9)
 
 print("Theta values test: ", test_3.sample())
