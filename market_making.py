@@ -11,6 +11,18 @@ class MarketMakerEnv(gym.Env):
     MAX_ORDER_SIZE = 1000
     MAX_INVENTORY  = 10000.0
 
+    ACTIONS_0_8 = np.array([
+        [1,1],
+        [2,2],
+        [3,3],
+        [4,4],
+        [5,5],
+        [1,3],
+        [3,1],
+        [2,5],
+        [5,2],
+    ])
+
     def __init__(self, lob_data: np.array, feature_extractor: callable):
         self.lob_depth = lob_data.shape[1]
         self.lob_data = lob_data
@@ -19,20 +31,19 @@ class MarketMakerEnv(gym.Env):
         self.inventory = 0
 
         self.observation_space = gym.spaces.Dict({
-            'order_book':       gym.spaces.Box( low = 0 , high=float("inf"), shape=(self.lob_depth*2, 4)   , dtype=float ),
+            'order_book': gym.spaces.Box( low = 0 , high=float("inf"), shape=(self.lob_depth*2, 4)   , dtype=float ),
         })
 
         self.action_space = gym.spaces.Dict({
             # 0: Ask, 1: Bid
             'order_size': gym.spaces.Box(low=0, high=MarketMakerEnv.MAX_ORDER_SIZE, shape=(2,), dtype=int),
+            'theta': gym.spaces.Box(low=0, high=9, shape=(1,), dtype=int),
         })
 
     def reset(self):
         self.t = 0
         self.inventory = 0
         return self._get_obs()
-
-
 
     def _get_obs(self):
         lob_obs = self.lob_data[self.t,:]
@@ -72,7 +83,14 @@ class MarketMakerEnv(gym.Env):
     def transition(self, current_state, action):
         next_state = current_state.copy()
         order_size = action['order_size']
-        order_side = action['order_side']
+        theta = action['order_side']
+
+        # Bid-Ask spread
+        p_a = current_state['order_book'][0]
+        p_b = current_state['order_book'][2]
+        spread = p_b - p_a
+        dist = spread/2 * theta * np.array([-1,1])
+        p_ab = np.mean([p_a, p_b]) + dist        
 
         # Place order
         if order_side == 0:
