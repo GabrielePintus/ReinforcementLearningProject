@@ -28,11 +28,12 @@ class MarketMakerEnv(gym.Env):
 
 
     def __init__(self, lob_data: np.array, feature_extractor: callable):
+
         self.lob_depth = lob_data.shape[1]
         self.lob_data = lob_data
         self.feature_extractor = feature_extractor # to do
 
-        # Agent's internal state
+        # Agent's internal state?
         self.inventory = 0
 
         self.observation_space = gym.spaces.Dict({
@@ -41,10 +42,9 @@ class MarketMakerEnv(gym.Env):
         })
 
         self.action_space = gym.spaces.Dict({
-            # Manca order side?5
             # 0: Ask, 1: Bid
             'order_size': gym.spaces.MultiDiscrete([MarketMakerEnv.MAX_ORDER_SIZE, MarketMakerEnv.MAX_ORDER_SIZE]), # Sampling di coppie di interi dall'intervallo [0,999]
-            'theta': gym.spaces.Discrete(9), # Sampling di due interi dall'intervallo [0,9] 
+            'theta': gym.spaces.Discrete(10), # [0,9]
         })
 
 
@@ -83,11 +83,11 @@ class MarketMakerEnv(gym.Env):
         
         mid_price = (lob_obs[0] + lob_obs[2]) / 2
         market_spread = lob_obs[2] - lob_obs[0]
-        mid_price_move = # to be completed
+        # mid_price_move = # to be completed
         book_imbalance = (lob_obs[3] - lob_obs[1])/(lob_obs[3] + lob_obs[1]) # (v_bid - v_ask) / (v_bid + v_ask)
         signed_volume = lob_obs[3] - lob_obs[1] # v_bid - v_ask
-        volatility = # to be completed
-        relative_strength_index = # to be completed
+        # volatility = # to be completed
+        # relative_strength_index = # to be completed
 
 
 
