@@ -5,12 +5,11 @@ import numpy as np
 
 
 
-
 class MarketMakerEnv(gym.Env):
 
-    MAX_ORDER_SIZE = 1000
-    MAX_INVENTORY  = 10000.0
-
+    # Constants
+    MAX_ORDER_SIZE = 1e3
+    MAX_INVENTORY_SIZE  = 1e4
     ACTIONS_0_8 = np.array([
         [1,1],
         [2,2],
@@ -22,122 +21,102 @@ class MarketMakerEnv(gym.Env):
         [2,5],
         [5,2],
     ])
+    
+    # Useful static methods
+    @staticmethod
+    def p(mid_price, theta, spread):
+        return mid_price + theta * spread
 
     def __init__(self, lob_data: np.array, feature_extractor: callable):
-        self.lob_depth = lob_data.shape[1]
-        self.lob_data = lob_data
-        self.feature_extractor = feature_extractor
-        # Agent's internal state
-        self.inventory = 0
-
-        self.observation_space = gym.spaces.Dict({
-            'order_book': gym.spaces.Box( low = 0 , high=float("inf"), shape=(self.lob_depth*2, 4)   , dtype=float ),
-        })
-
-        self.action_space = gym.spaces.Dict({
-            # 0: Ask, 1: Bid
-            'order_size': gym.spaces.Box(low=0, high=MarketMakerEnv.MAX_ORDER_SIZE, shape=(2,), dtype=int),
-            'theta': gym.spaces.Box(low=0, high=9, shape=(1,), dtype=int),
-        })
-
-    def reset(self):
-        self.t = 0
-        self.inventory = 0
-        return self._get_obs()
-
-    def _get_obs(self):
-        lob_obs = self.lob_data[self.t,:]
-        features_obs = self.feature_extractor(lob_obs)
-        return {
-            'order_book': lob_obs,
-            'features': features_obs,
-            'inventory': np.array([self.inventory], dtype=float)
-        }
-
-    # Simple PnL
-    def reward(self, prev_state, action, next_state):
-        reward = 0
-
-        # Change in the mid price
-        prev_mid_price = prev_state['features'][0]
-        next_mid_price = next_state['features'][0]        
+        # Environment state = agent_state + market_state
         
-        # Change in the value of the inventory
-        next_inventory = next_state['inventory']
-        diff_inventory = ( next_mid_price - prev_mid_price ) * next_inventory
-        reward += diff_inventory
-
-        # Profit derived from order execution
-        order_size = action['order_size']
-        p_a = next_state['order_book'][0]
-        p_b = next_state['order_book'][2]
-        psi_a = order_size[0] * ( p_a - next_mid_price )
-        psi_b = order_size[1] * ( next_mid_price - p_b )
-        reward += psi_a + psi_b
-
-        return reward
-
-
-
-    # Given a state and an action, return the next state
-    def transition(self, current_state, action):
-        next_state = current_state.copy()
-        order_size = action['order_size']
-        theta = action['order_side']
-
-        # Bid-Ask spread
-        p_a = current_state['order_book'][0]
-        p_b = current_state['order_book'][2]
-        spread = p_b - p_a
-        dist = spread/2 * theta * np.array([-1,1])
-        p_ab = np.mean([p_a, p_b]) + dist        
-
-        # Place order
-        if order_side == 0:
-            next_state['order_book'][self.t,1] += order_size[0]
-        else:
-            next_state['order_book'][self.t,3] += order_size[1]
-
-        # Update time
-        self.t += 1
+        # Agent state = (inventory, spread, theta_a, theta_b)
+        # 1. Inventory - the amount of stock currently owned or owed by the agent
+        # 2. Spread - the current value of the spread scale factor
+        # 3. Active quoting distances normalized by the current spread
+        #    there are the effective values of the control parameters theta_a and theta_b
+        #    after stepping forward in the simulation
+        self.agent_state = np.zeros(4)
         
-        return next_state
+        # Market state = (ba_spread, mid_move, book_imbalance, signed_volume, volatility, rsi)
+        # 1. Bid-Ask spread
+        # 2. Mid price move
+        # 3. Book imbalance
+        # 4. Signed volume
+        # 5. Volatility
+        # 6. Relative Strength Index (RSI)
+        self.market_state = np.zeros(6)
+        
+        # Action space
+        # There are a total of 9 possible actions (buy, sell) that the agent can take
+        # 1 = (1,1), ..., 5 = (5,5), 6 = (1,3), 7 = (3,1), 8 = (2,5), 9 = (5,2)
+        self.action_space = gym.spaces.Discrete(9)
+        
+        # Additional variables
+        self.reference_price = 0
+        self.ask_book = dict()
+        self.bid_book = dict()
+        self.p_a = 0
+        self.p_b = 0
+    
+    # Given the current open position, check if some of the orders can be matched and execute them
+    def match(self):
+        # check if there are any orders in the bid book
+        # that can be matched with the ask book
+        # Additionally, save the amount of volume matched
+        matched_a = 0
+        matched_b = 0
+        for price in self.bid_book:
+            if price in self.ask_book:
+                if self.bid_book[price] > self.ask_book[price]:
+                    matched_a += self.ask_book[price]
+                    matched_b += self.ask_book[price]
+                    self.bid_book[price] -= self.ask_book[price]
+                    self.ask_book.pop(price)
+                else:
+                    matched_a += self.bid_book[price]
+                    matched_b += self.bid_book[price]
+                    self.ask_book[price] -= self.bid_book[price]
+                    self.bid_book.pop(price)
+                    
+        return matched_a, matched_b
+        
+        
     
 
+    def reset(self):
+        self.agent_state = np.zeros_like(self.agent_state)
+        self.market_state = np.zeros_like(self.market_state)
+    
+    def reward(self):
+        """
+            Simple Profit and Loss (PnL) reward function
+        """        
+        d_a = self.agent_state[2] * self.agent_state[1]
+        d_b = -1 * self.agent_state[3] * self.agent_state[1]
+        matched_a, matched_b = self.match()
+        psi_a = matched_a * d_a
+        psi_b = matched_b * d_b
+        
+        phi = self.agent_state[0] * self.market_state[1]
+        Psi = psi_a + psi_b + phi
+        
+        return Psi
+
+    def transition(self, action):
+        """
+            Transition function
+            The action specifies which orders to place in the market both on the bid and ask side
+            it is essentialy the theta values for the bid and ask side
+        """
+        theta_a, theta_b = self.ACTIONS_0_8[action]
+        self.agent_state[2] = theta_a
+        self.agent_state[3] = theta_b        
+        
+
     def step(self, action):
-        # Get action from agent
-        order_size = action['order_size']   
-        order_side = action['order_side']
-        action_type = action['action_type']
-
-        # Compute market features
-        current_state = self._get_obs()
-
-        # Perform action
-        next_state = self.transition(current_state, action)
-
-        # Compute reward
-        reward = self.reward(current_state, action, next_state)
-
-        # Check if episode is over
+        self.transition(action)
+        reward = self.reward()
         done = False
-        if self.t == self.lob_data.shape[0]:
-            done = True
-
-        return next_state, reward, done, {}
-        
-
-
-
-
-
-        
-        
-
-
-    def render(self, mode='human'):
-        pass
-
-    def close(self):
-        pass
+        return self.agent_state, reward, done, {}
 
