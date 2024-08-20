@@ -15,10 +15,10 @@ class DataGenerator:
 
         data = {}
         for level in range(1, levels + 1):
-            data[f'Ask Price {level}'] = df.iloc[:, (level - 1) * 4]
-            data[f'Ask Volume {level}'] = df.iloc[:, (level - 1) * 4 + 1]
-            data[f'Bid Price {level}'] = df.iloc[:, (level - 1) * 4 + 2]
-            data[f'Bid Volume {level}'] = df.iloc[:, (level - 1) * 4 + 3]
+            data[f'Ask Price {level}'] = df.iloc[:, (level - 1) * 4]        # QULACUNO NEL MERCATO VUOLE COMPRARE A TOT
+            data[f'Ask Volume {level}'] = df.iloc[:, (level - 1) * 4 + 1]   # QUALCUNO NEL MERCATO VUOLE COMPRARE TOT QUANTITA'
+            data[f'Bid Price {level}'] = df.iloc[:, (level - 1) * 4 + 2]    # QUALCUNO NEL MERCATO VUOLE VENDERE A TOT
+            data[f'Bid Volume {level}'] = df.iloc[:, (level - 1) * 4 + 3]   # QUALCUNO NEL MERCATO VUOLE VENDERE TOT QUANTITA'
         
         # Crea un nuovo DataFrame con le colonne riorganizzate
         LOB = pd.DataFrame(data)
@@ -31,7 +31,7 @@ class DataGenerator:
 
         # Issues:
 
-        # Volatility è la std dei returns, che non abbiamo, su 10 periodi: quindi usiamo come proxy il moving mid price?
+        # Volatility è la std dei returns, che non abbiamo, su 10 periodi. Quindi usiamo come proxy il moving mid price?
 
         LOB['Volatility'] = LOB['Mid Price Movement'].rolling(window=10).std()
 
@@ -46,3 +46,4 @@ class DataGenerator:
         # RS = Average Gain / Average Loss per un periodo di tempo (di solito 14 istanze)
 
         return LOB
+    
