@@ -25,6 +25,7 @@ class MarketMakerEnv(gym.Env):
     # Useful static methods
     @staticmethod
     def p(mid_price, theta, spread):
+        # ref + dist
         return mid_price + theta * spread
 
     def __init__(self, lob_data: np.array, feature_extractor: callable):
@@ -39,6 +40,7 @@ class MarketMakerEnv(gym.Env):
         self.agent_state = np.zeros(4)
         
         # Market state = (ba_spread, mid_move, book_imbalance, signed_volume, volatility, rsi)
+        # 0. Mid price
         # 1. Bid-Ask spread
         # 2. Mid price move
         # 3. Book imbalance
@@ -53,11 +55,14 @@ class MarketMakerEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(9)
         
         # Additional variables
-        self.reference_price = 0
+        self.t = 0
         self.ask_book = dict()
         self.bid_book = dict()
+        self.market_book_data = lob_data
         self.p_a = 0
         self.p_b = 0
+        self.v_a = gym.spaces.Box(low=1, high=self.MAX_ORDER_SIZE, shape=(1,))
+        self.v_b = gym.spaces.Box(low=1, high=self.MAX_ORDER_SIZE, shape=(1,))
     
     # Given the current open position, check if some of the orders can be matched and execute them
     def match(self):
@@ -66,25 +71,31 @@ class MarketMakerEnv(gym.Env):
         # Additionally, save the amount of volume matched
         matched_a = 0
         matched_b = 0
-        for price in self.bid_book:
-            if price in self.ask_book:
-                if self.bid_book[price] > self.ask_book[price]:
-                    matched_a += self.ask_book[price]
-                    matched_b += self.ask_book[price]
-                    self.bid_book[price] -= self.ask_book[price]
-                    self.ask_book.pop(price)
-                else:
-                    matched_a += self.bid_book[price]
-                    matched_b += self.bid_book[price]
-                    self.ask_book[price] -= self.bid_book[price]
-                    self.bid_book.pop(price)
-                    
+        market_book = self.market_book_data[self.t,:]
+        # Check if i can buy from someone in the market
+        if market_book[2] in self.ask_book.keys():
+            market_volume = market_book[3]
+            agent_volume = self.ask_book[market_book[2]]
+            matched_a = min(market_volume, agent_volume)
+            self.ask_book[market_book[2]] -= matched_a
+        # Check if i can sell to someone in the market
+        if market_book[0] in self.bid_book.keys():
+            market_volume = market_book[1]
+            agent_volume = self.bid_book[market_book[0]]
+            matched_b = min(market_volume, agent_volume)
+            self.bid_book[market_book[0]] -= matched_b
+
         return matched_a, matched_b
         
-        
+    def place_order(self, price, volume, side):
+        if side == 'ask':
+            self.ask_book[price] = self.ask_book.get(price, 0) + volume
+        elif side == 'bid':
+            self.bid_book[price] = self.bid_book.get(price, 0) + volume
     
 
     def reset(self):
+        self.t = 0
         self.agent_state = np.zeros_like(self.agent_state)
         self.market_state = np.zeros_like(self.market_state)
     
@@ -98,7 +109,7 @@ class MarketMakerEnv(gym.Env):
         psi_a = matched_a * d_a
         psi_b = matched_b * d_b
         
-        phi = self.agent_state[0] * self.market_state[1]
+        phi = self.agent_state[0] * self.market_state[6]
         Psi = psi_a + psi_b + phi
         
         return Psi
@@ -111,7 +122,28 @@ class MarketMakerEnv(gym.Env):
         """
         theta_a, theta_b = self.ACTIONS_0_8[action]
         self.agent_state[2] = theta_a
-        self.agent_state[3] = theta_b        
+        self.agent_state[3] = theta_b
+        # Place orders in the market
+        # First compute the half spread
+        spread = self.market_state[5] / 2
+        self.agent_state[1] = spread
+        # Compute the bid and ask prices along with the volume
+        p_a = self.p(self.market_state[5], -theta_a, spread)
+        p_b = self.p(self.market_state[5], theta_b, spread)
+        v_a = self.v_a.sample()
+        v_b = self.v_b.sample()
+        # Update the bid and ask books
+        self.place_order(p_a, v_a, 'ask')
+        self.place_order(p_b, v_b, 'bid')
+
+        # Execute the orders
+        # Update the time
+        self.t += 1
+        matched_a, matched_b = self.match()
+        # Update the inventory
+        self.agent_state[0] += matched_a - matched_b
+
+
         
 
     def step(self, action):
