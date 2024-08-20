@@ -15,10 +15,10 @@ class DataGenerator:
 
         data = {}
         for level in range(1, levels + 1):
-            data[f'Ask Price {level}'] = df.iloc[:, (level - 1) * 4]        # QULACUNO NEL MERCATO VUOLE COMPRARE A TOT
+            data[f'Ask Price {level}'] = df.iloc[:, (level - 1) * 4] / 1e4       # QULACUNO NEL MERCATO VUOLE COMPRARE A TOT
             data[f'Ask Volume {level}'] = df.iloc[:, (level - 1) * 4 + 1]   # QUALCUNO NEL MERCATO VUOLE COMPRARE TOT QUANTITA'
-            data[f'Bid Price {level}'] = df.iloc[:, (level - 1) * 4 + 2]    # QUALCUNO NEL MERCATO VUOLE VENDERE A TOT
-            data[f'Bid Volume {level}'] = df.iloc[:, (level - 1) * 4 + 3]   # QUALCUNO NEL MERCATO VUOLE VENDERE TOT QUANTITA'
+            data[f'Bid Price {level}'] = df.iloc[:, (level - 1) * 4 + 2] / 1e4   # QUALCUNO NEL MERCATO VUOLE VENDERE A TOT
+            data[f'Bid Volume {level}'] = df.iloc[:, (level - 1) * 4 + 3]  # QUALCUNO NEL MERCATO VUOLE VENDERE TOT QUANTITA'
         
         # Crea un nuovo DataFrame con le colonne riorganizzate
         LOB = pd.DataFrame(data)
@@ -52,7 +52,15 @@ class DataGenerator:
 
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    
     df = DataGenerator._generator('data/lob.csv', levels=1)
-    print(df.head())
+    
+    # Plot mid price
+    plt.plot(df['Market Spread'])
+    plt.title('Mid Price')
+    plt.show()
+
+    
 
 

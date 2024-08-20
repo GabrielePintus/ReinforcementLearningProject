@@ -5,6 +5,7 @@ import numpy as np
 
 
 
+
 class MarketMakerEnv(gym.Env):
 
     # Constants
@@ -26,9 +27,12 @@ class MarketMakerEnv(gym.Env):
     @staticmethod
     def p(mid_price, theta, spread):
         # ref + dist
+        print('mid_price', mid_price)
+        print('theta', theta)
+        print('spread', spread)
         return mid_price + theta * spread
 
-    def __init__(self, lob_data: np.array, feature_extractor: callable):
+    def __init__(self, lob_data: np.array, horizon=np.inf):
         # Environment state = agent_state + market_state
         
         # Agent state = (inventory, spread, theta_a, theta_b)
@@ -56,13 +60,14 @@ class MarketMakerEnv(gym.Env):
         
         # Additional variables
         self.t = 0
+        self.horizon = horizon
         self.ask_book = dict()
         self.bid_book = dict()
         self.market_book_data = lob_data
         self.p_a = 0
         self.p_b = 0
-        self.v_a = gym.spaces.Box(low=1, high=self.MAX_ORDER_SIZE, shape=(1,))
-        self.v_b = gym.spaces.Box(low=1, high=self.MAX_ORDER_SIZE, shape=(1,))
+        self.v_a = gym.spaces.Box(low=1, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
+        self.v_b = gym.spaces.Box(low=1, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
     
     # Given the current open position, check if some of the orders can be matched and execute them
     def match(self):
@@ -98,6 +103,9 @@ class MarketMakerEnv(gym.Env):
         self.t = 0
         self.agent_state = np.zeros_like(self.agent_state)
         self.market_state = np.zeros_like(self.market_state)
+        self.market_state = self.market_book_data[self.t,:]
+        
+        return self.market_state
     
     def reward(self):
         """
@@ -130,8 +138,8 @@ class MarketMakerEnv(gym.Env):
         # Compute the bid and ask prices along with the volume
         p_a = self.p(self.market_state[5], -theta_a, spread)
         p_b = self.p(self.market_state[5], theta_b, spread)
-        v_a = self.v_a.sample()
-        v_b = self.v_b.sample()
+        v_a = self.v_a.sample()[0]
+        v_b = self.v_b.sample()[0]
         # Update the bid and ask books
         self.place_order(p_a, v_a, 'ask')
         self.place_order(p_b, v_b, 'bid')
@@ -149,6 +157,6 @@ class MarketMakerEnv(gym.Env):
     def step(self, action):
         self.transition(action)
         reward = self.reward()
-        done = False
-        return self.agent_state, reward, done, {}
+        done = self.t >= self.horizon
+        return self.market_state, reward, done, {}
 
