@@ -57,9 +57,7 @@ if __name__ == '__main__':
     df = DataGenerator._generator('data/lob.csv', levels=1)
     
     # Plot mid price
-    plt.plot(df['Market Spread'])
-    plt.title('Mid Price')
-    plt.show()
+    print(df.head())
 
     
 

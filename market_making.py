@@ -66,8 +66,8 @@ class MarketMakerEnv(gym.Env):
         self.market_book_data = lob_data
         self.p_a = 0
         self.p_b = 0
-        self.v_a = gym.spaces.Box(low=1, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
-        self.v_b = gym.spaces.Box(low=1, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
+        self.v_a = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
+        self.v_b = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
     
     # Given the current open position, check if some of the orders can be matched and execute them
     def match(self):
@@ -136,8 +136,9 @@ class MarketMakerEnv(gym.Env):
         spread = self.market_state[5] / 2
         self.agent_state[1] = spread
         # Compute the bid and ask prices along with the volume
-        p_a = self.p(self.market_state[5], -theta_a, spread)
-        p_b = self.p(self.market_state[5], theta_b, spread)
+        print('mid price', self.market_state[4])
+        p_a = self.p(self.market_state[4], -theta_a, spread)
+        p_b = self.p(self.market_state[4], theta_b, spread)
         v_a = self.v_a.sample()[0]
         v_b = self.v_b.sample()[0]
         # Update the bid and ask books
