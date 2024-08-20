@@ -25,15 +25,17 @@ class DataGenerator:
 
         LOB['Mid Price'] = (LOB['Ask Price 1'] + LOB['Bid Price 1']) / 2
         LOB['Market Spread'] = LOB['Ask Price 1'] - LOB['Bid Price 1']
-        LOB['Mid Price Movement'] = LOB['Mid Price'].diff().shift(-1) # Che è anche il return
+        LOB['Mid Price Movement'] = LOB['Mid Price'].rolling(2).apply(lambda x: x.iloc[1] - x.iloc[0]).fillna(0)
         LOB['Book Imbalance'] = (LOB['Bid Volume 1'] - LOB['Ask Volume 1']) / (LOB['Bid Volume 1'] + LOB['Ask Volume 1'])
         LOB['Signed Volume'] = LOB['Bid Volume 1'] - LOB['Ask Volume 1']
 
         # Issues:
 
-        # Volatility è la std dei returns, che non abbiamo, su 10 periodi. Quindi usiamo come proxy il moving mid price?
+        # Returns = (Price at time t - Price at time t-1) / Price at time t-1
+        LOB['Returns'] = LOB['Mid Price'].pct_change()
 
-        LOB['Volatility'] = LOB['Mid Price Movement'].rolling(window=10).std()
+        # Volatility è la std dei returns, che non abbiamo, su 10 periodi. Quindi usiamo come proxy il moving mid price?
+        LOB['Volatility'] = LOB['Returns'].rolling(window=10).std()
 
         delta = LOB['Mid Price'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -45,5 +47,12 @@ class DataGenerator:
         # RSI=100 − 100/(1+ RS)
         # RS = Average Gain / Average Loss per un periodo di tempo (di solito 14 istanze)
 
-        return LOB
-    
+        return LOB.dropna().reset_index(drop=True)
+
+
+
+if __name__ == '__main__':
+    df = DataGenerator._generator('data/lob.csv', levels=1)
+    print(df.head())
+
+
