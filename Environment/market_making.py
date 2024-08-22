@@ -4,6 +4,20 @@ import numpy as np
 
 
 
+class PhiTransform:
+    
+    @staticmethod
+    def PnL(x):
+        return x
+    
+    @staticmethod
+    def PnL_dampened(x, c=0.5):
+        return (1-c) * x
+    
+    @staticmethod
+    def PnL_asymm_dampened(x, c=-0.5):
+        return x * (1-c) - np.abs(c*x)
+        
 
 
 class MarketMakerEnv(gym.Env):
@@ -29,7 +43,12 @@ class MarketMakerEnv(gym.Env):
         # ref + dist
         return mid_price + theta * spread
 
-    def __init__(self, lob_data: np.array, horizon=np.inf):
+    def __init__(
+        self,
+        lob_data: np.array,
+        horizon=np.inf,
+        phi_transorm=lambda x: x,
+    ):
         # Environment state = agent_state + market_state
         
         # Agent state = (inventory, spread, theta_a, theta_b)
