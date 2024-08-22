@@ -121,8 +121,9 @@ class TileCodingValueFunction:
 
 # Linear Function Approximator
 class LinearFunctionApproximator:
-    def __init__(self, state_dim, action_dim):
+    def __init__(self, state_dim, action_dim, alpha=0.1):
         self.weights = np.zeros((action_dim, state_dim))
+        self.alpha = alpha
     
     def get_features(self, state, action):
         features = np.zeros(self.weights.shape[1])
@@ -133,9 +134,9 @@ class LinearFunctionApproximator:
         q_values = np.dot(self.weights, state)  # Linear combination of features and weights
         return q_values
     
-    def update(self, state, action, td_error, alpha):
+    def update(self, state, action, td_error):
         features = self.get_features(state, action)
-        self.weights[action] += alpha * td_error * features  # Update rule for linear function approximator
+        self.weights[action] += self.alpha * td_error * features  # Update rule for linear function approximator
 
 
 
