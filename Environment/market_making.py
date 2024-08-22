@@ -27,9 +27,6 @@ class MarketMakerEnv(gym.Env):
     @staticmethod
     def p(mid_price, theta, spread):
         # ref + dist
-        print('mid_price', mid_price)
-        print('theta', theta)
-        print('spread', spread)
         return mid_price + theta * spread
 
     def __init__(self, lob_data: np.array, horizon=np.inf):
@@ -62,12 +59,18 @@ class MarketMakerEnv(gym.Env):
         self.t = 0
         self.horizon = horizon
         self.ask_book = dict()
+        self.best_ask = 0
         self.bid_book = dict()
+        self.best_bid = 0
         self.market_book_data = lob_data
         self.p_a = 0
         self.p_b = 0
         self.v_a = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
         self.v_b = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
+
+        # Variables for additional information
+        self.total_orders_placed = 0
+        self.total_orders_executed = 0
     
     # Given the current open position, check if some of the orders can be matched and execute them
     def match(self):
@@ -78,25 +81,48 @@ class MarketMakerEnv(gym.Env):
         matched_b = 0
         market_book = self.market_book_data[self.t,:]
         # Check if i can buy from someone in the market
-        if market_book[2] in self.ask_book.keys():
-            market_volume = market_book[3]
-            agent_volume = self.ask_book[market_book[2]]
-            matched_a = min(market_volume, agent_volume)
-            self.ask_book[market_book[2]] -= matched_a
+        # if market_book[2] in self.ask_book.keys():
+        #     market_volume = market_book[3]
+        #     agent_volume = self.ask_book[market_book[2]]
+        #     matched_a = min(market_volume, agent_volume)
+        #     self.ask_book[market_book[2]] -= matched_a
+        #     self.total_orders_executed += 1
+        # # Check if i can sell to someone in the market
+        # if market_book[0] in self.bid_book.keys():
+        #     market_volume = market_book[1]
+        #     agent_volume = self.bid_book[market_book[0]]
+        #     matched_b = min(market_volume, agent_volume)
+        #     self.bid_book[market_book[0]] -= matched_b
+        #     self.total_orders_executed += 1
+
+        # Check if i can buy from someone in the market
+        for price, volume in self.ask_book.items():
+            if price <= market_book[2]:
+                v = min(volume, market_book[3])
+                matched_a += v
+                self.ask_book[price] -= v
+                self.total_orders_executed += 1
         # Check if i can sell to someone in the market
-        if market_book[0] in self.bid_book.keys():
-            market_volume = market_book[1]
-            agent_volume = self.bid_book[market_book[0]]
-            matched_b = min(market_volume, agent_volume)
-            self.bid_book[market_book[0]] -= matched_b
+        for price, volume in self.bid_book.items():
+            if price >= market_book[0]:
+                v = min(volume, market_book[1])
+                matched_b += v
+                self.bid_book[price] -= v
+                self.total_orders_executed += 1
+                
 
         return matched_a, matched_b
         
     def place_order(self, price, volume, side):
         if side == 'ask':
             self.ask_book[price] = self.ask_book.get(price, 0) + volume
+            self.best_ask = min(self.ask_book.keys())
         elif side == 'bid':
             self.bid_book[price] = self.bid_book.get(price, 0) + volume
+            self.best_bid = max(self.bid_book.keys())
+        
+        # Update the total number of orders placed
+        self.total_orders_placed += 1
     
 
     def reset(self):
@@ -104,6 +130,10 @@ class MarketMakerEnv(gym.Env):
         self.agent_state = np.zeros_like(self.agent_state)
         self.market_state = np.zeros_like(self.market_state)
         self.market_state = self.market_book_data[self.t,:]
+        self.ask_book = dict()
+        self.bid_book = dict()
+        self.total_orders_placed = 0
+        self.total_orders_executed = 0
         
         return self.market_state
     
@@ -120,7 +150,14 @@ class MarketMakerEnv(gym.Env):
         phi = self.agent_state[0] * self.market_state[6]
         Psi = psi_a + psi_b + phi
         
-        return Psi
+        return Psi, psi_a, psi_b, phi
+    
+    def clear_inventory(self):
+        """
+            Clear the inventory at the end of the episode
+        """
+        return self.agent_state[0] * self.market_state[0]
+    
 
     def transition(self, action):
         """
@@ -136,7 +173,6 @@ class MarketMakerEnv(gym.Env):
         spread = self.market_state[5] / 2
         self.agent_state[1] = spread
         # Compute the bid and ask prices along with the volume
-        print('mid price', self.market_state[4])
         p_a = self.p(self.market_state[4], -theta_a, spread)
         p_b = self.p(self.market_state[4], theta_b, spread)
         v_a = self.v_a.sample()[0]
@@ -153,11 +189,18 @@ class MarketMakerEnv(gym.Env):
         self.agent_state[0] += matched_a - matched_b
 
 
-        
-
     def step(self, action):
         self.transition(action)
-        reward = self.reward()
+        reward, psi_a, psi_b, phi = self.reward()
         done = self.t >= self.horizon
-        return self.market_state, reward, done, {}
+        info = {
+            'total_orders_placed': self.total_orders_placed,
+            'total_orders_executed': self.total_orders_executed,
+            'inventory': self.agent_state[0],
+            'reward': reward,
+            'psi_a': psi_a,
+            'psi_b': psi_b,
+            'phi': phi,
+        }
+        return self.market_state, reward, done, info
 
