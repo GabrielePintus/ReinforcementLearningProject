@@ -12,11 +12,11 @@ class PhiTransform:
     
     @staticmethod
     def PnL_dampened(x, c=0.5):
-        return (1-c) * x
+        return lambda x: (1-c) * x
     
     @staticmethod
     def PnL_asymm_dampened(x, c=-0.5):
-        return x * (1-c) - np.abs(c*x)
+        return lambda x: x * (1-c) - np.abs(c*x)
         
 
 
