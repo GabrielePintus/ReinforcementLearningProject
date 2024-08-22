@@ -1,14 +1,10 @@
 import numpy as np
 from tqdm.auto import tqdm
-from policies import Policies
+from Libraries import policies
 
 
 
 class LearningAgent:
-    """
-        Learning agent that can interact with an environment
-        From this class we can create different agents with different learning algorithms
-    """
     def __init__(self, env, value_function, update_rule, policy, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
         self.env = env
         self.value_function = value_function  # Generalized value function approximator
@@ -22,7 +18,7 @@ class LearningAgent:
     
     # Choose action based on the policy
     def choose_action(self, state):
-        return self.policy(state, self.value_function, self.epsilon)
+        return self.policy(state, self.value_function, self.env, self.epsilon)
     
     # Update the value function using the specified update rule
     def learn(self, state, action, reward, next_state, next_action, done):
@@ -74,8 +70,6 @@ class LearningAgent:
 
 
 
-
-
 class LearningUpdates:
 
     # Q-Learning Update Rule
@@ -118,5 +112,6 @@ class LearningUpdates:
 
 class QLearningAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
-        super().__init__(env, value_function, LearningUpdates.q_learning_update, Policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
+        super().__init__(env, value_function, LearningUpdates.q_learning_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
+        
         

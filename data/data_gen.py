@@ -10,7 +10,7 @@ class DataGenerator:
         levels (int): Number of levels in the order book
     """
     @staticmethod
-    def _generator(filename, header=False, levels = 1): # CHANGE LEVELS TO 5 QUANDO USEREMO IL FILE "VERO"
+    def _generator(filename, levels = 1): # CHANGE LEVELS TO 5 QUANDO USEREMO IL FILE "VERO"
         df = pd.read_csv(filename)
 
         data = {}
