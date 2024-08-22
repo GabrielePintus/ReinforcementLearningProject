@@ -49,7 +49,7 @@ class MarketMakerEnv(gym.Env):
         horizon=np.inf,
         phi_transorm=lambda x: x,
     ):
-        # Environment state = agent_state + market_state
+        # Environment state = agent_state + observation_space
         
         # Agent state = (inventory, spread, theta_a, theta_b)
         # 1. Inventory - the amount of stock currently owned or owed by the agent
@@ -67,7 +67,7 @@ class MarketMakerEnv(gym.Env):
         # 4. Signed volume
         # 5. Volatility
         # 6. Relative Strength Index (RSI)
-        self.market_state = np.zeros(6)
+        self.observation_space = np.zeros(6)
         
         # Action space
         # There are a total of 9 possible actions (buy, sell) that the agent can take
@@ -86,6 +86,7 @@ class MarketMakerEnv(gym.Env):
         self.p_b = 0
         self.v_a = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
         self.v_b = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
+        self.phi_transform = phi_transorm
 
         # Variables for additional information
         self.total_orders_placed = 0
@@ -99,20 +100,6 @@ class MarketMakerEnv(gym.Env):
         matched_a = 0
         matched_b = 0
         market_book = self.market_book_data[self.t,:]
-        # Check if i can buy from someone in the market
-        # if market_book[2] in self.ask_book.keys():
-        #     market_volume = market_book[3]
-        #     agent_volume = self.ask_book[market_book[2]]
-        #     matched_a = min(market_volume, agent_volume)
-        #     self.ask_book[market_book[2]] -= matched_a
-        #     self.total_orders_executed += 1
-        # # Check if i can sell to someone in the market
-        # if market_book[0] in self.bid_book.keys():
-        #     market_volume = market_book[1]
-        #     agent_volume = self.bid_book[market_book[0]]
-        #     matched_b = min(market_volume, agent_volume)
-        #     self.bid_book[market_book[0]] -= matched_b
-        #     self.total_orders_executed += 1
 
         # Check if i can buy from someone in the market
         for price, volume in self.ask_book.items():
@@ -147,26 +134,31 @@ class MarketMakerEnv(gym.Env):
     def reset(self):
         self.t = 0
         self.agent_state = np.zeros_like(self.agent_state)
-        self.market_state = np.zeros_like(self.market_state)
-        self.market_state = self.market_book_data[self.t,:]
+        self.observation_space = np.zeros_like(self.observation_space)
+        self.observation_space = self.market_book_data[self.t,:]
         self.ask_book = dict()
         self.bid_book = dict()
         self.total_orders_placed = 0
         self.total_orders_executed = 0
         
-        return self.market_state
+        return self.observation_space
     
     def reward(self):
         """
             Simple Profit and Loss (PnL) reward function
         """        
+        # Compute psi_a and psi_b
         d_a = self.agent_state[2] * self.agent_state[1]
         d_b = -1 * self.agent_state[3] * self.agent_state[1]
         matched_a, matched_b = self.match()
         psi_a = matched_a * d_a
         psi_b = matched_b * d_b
         
-        phi = self.agent_state[0] * self.market_state[6]
+        # Compute phi
+        phi = self.agent_state[0] * self.observation_space[6]
+        phi = self.phi_transform(phi)
+        
+        # Compute the total reward
         Psi = psi_a + psi_b + phi
         
         return Psi, psi_a, psi_b, phi
@@ -175,7 +167,7 @@ class MarketMakerEnv(gym.Env):
         """
             Clear the inventory at the end of the episode
         """
-        return self.agent_state[0] * self.market_state[0]
+        return self.agent_state[0] * self.observation_space[0]
     
 
     def transition(self, action):
@@ -189,11 +181,11 @@ class MarketMakerEnv(gym.Env):
         self.agent_state[3] = theta_b
         # Place orders in the market
         # First compute the half spread
-        spread = self.market_state[5] / 2
+        spread = self.observation_space[5] / 2
         self.agent_state[1] = spread
         # Compute the bid and ask prices along with the volume
-        p_a = self.p(self.market_state[4], -theta_a, spread)
-        p_b = self.p(self.market_state[4], theta_b, spread)
+        p_a = self.p(self.observation_space[4], -theta_a, spread)
+        p_b = self.p(self.observation_space[4], theta_b, spread)
         v_a = self.v_a.sample()[0]
         v_b = self.v_b.sample()[0]
         # Update the bid and ask books
@@ -221,5 +213,5 @@ class MarketMakerEnv(gym.Env):
             'psi_b': psi_b,
             'phi': phi,
         }
-        return self.market_state, reward, done, info
+        return self.observation_space, reward, done, info
 
