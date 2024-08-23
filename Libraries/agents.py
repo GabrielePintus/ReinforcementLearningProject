@@ -92,7 +92,24 @@ class LearningUpdates:
         q_values = value_function.get_q_values(state)
         next_q_values = value_function.get_q_values(next_state)
         
-        td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
+        td_target = reward + (gamma * next_q_values[next_action] if not done else reward) 
+        td_error = td_target - q_values[action]
+        
+        value_function.update(state, action, td_error, alpha)
+
+    # Expected SARSA Update Rule
+    @staticmethod
+    def expected_sarsa_update(state, action, reward, next_state, done, value_function, alpha, gamma):
+        q_values = value_function.get_q_values(state)
+        next_q_values = value_function.get_q_values(next_state)
+
+        action_probabilities = np.ones_like(next_q_values) * (value_function.epsilon / len(next_q_values))
+        best_action = np.argmax(next_q_values)
+        action_probabilities[best_action] += 1 - value_function.epsilon
+
+        expected_next_q = np.dot(next_q_values, action_probabilities)
+        
+        td_target = reward + (gamma * expected_next_q if not done else reward)
         td_error = td_target - q_values[action]
         
         value_function.update(state, action, td_error, alpha)
@@ -160,3 +177,7 @@ class TDNAgent(LearningAgent):
 class SarsaAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
         super().__init__(env, value_function, LearningUpdates.sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
+
+class ExpectedSarsaAgent(LearningAgent):
+    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
+        super().__init__(env, value_function, LearningUpdates.expected_sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
