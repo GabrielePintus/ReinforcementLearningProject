@@ -35,6 +35,7 @@ class MarketMakerEnv(gym.Env):
         [3,1],
         [2,5],
         [5,2],
+        [-1,-1],
     ])
     
     # Useful static methods
@@ -72,7 +73,7 @@ class MarketMakerEnv(gym.Env):
         # Action space
         # There are a total of 9 possible actions (buy, sell) that the agent can take
         # 1 = (1,1), ..., 5 = (5,5), 6 = (1,3), 7 = (3,1), 8 = (2,5), 9 = (5,2)
-        self.action_space = gym.spaces.Discrete(9)
+        self.action_space = gym.spaces.Discrete(10)
         
         # Additional variables
         self.t = 0
@@ -177,20 +178,30 @@ class MarketMakerEnv(gym.Env):
             it is essentialy the theta values for the bid and ask side
         """
         theta_a, theta_b = self.ACTIONS_0_8[action]
-        self.agent_state[2] = theta_a
-        self.agent_state[3] = theta_b
-        # Place orders in the market
-        # First compute the half spread
-        spread = self.observation_space[5] / 2
-        self.agent_state[1] = spread
-        # Compute the bid and ask prices along with the volume
-        p_a = self.p(self.observation_space[4], -theta_a, spread)
-        p_b = self.p(self.observation_space[4], theta_b, spread)
-        v_a = self.v_a.sample()[0]
-        v_b = self.v_b.sample()[0]
-        # Update the bid and ask books
-        self.place_order(p_a, v_a, 'ask')
-        self.place_order(p_b, v_b, 'bid')
+        if theta_a < 0 and theta_b < 0:
+            # clear inventory 
+            total_ask = sum(self.ask_book.values())
+            total_bid = sum(self.bid_book.values())
+            balance_volume = total_ask - total_bid
+            if balance_volume > 0:
+                self.place_order(self.best_bid, balance_volume, 'bid')
+            elif balance_volume < 0:
+                self.place_order(self.best_ask, -balance_volume, 'ask')
+        else:
+            self.agent_state[2] = theta_a
+            self.agent_state[3] = theta_b
+            # Place orders in the market
+            # First compute the half spread
+            spread = self.observation_space[5] / 2
+            self.agent_state[1] = spread
+            # Compute the bid and ask prices along with the volume
+            p_a = self.p(self.observation_space[4], -theta_a, spread)
+            p_b = self.p(self.observation_space[4], theta_b, spread)
+            v_a = self.v_a.sample()[0]
+            v_b = self.v_b.sample()[0]
+            # Update the bid and ask books
+            self.place_order(p_a, v_a, 'ask')
+            self.place_order(p_b, v_b, 'bid')
 
         # Execute the orders
         # Update the time

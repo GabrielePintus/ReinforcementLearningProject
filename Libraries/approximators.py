@@ -7,7 +7,6 @@ class TileCoder:
         self.num_tiles = num_tiles
         self.num_tilings = num_tilings
         self.state_bounds = state_bounds
-        # Consider different bounds for each dimension - TODO
         self.tile_widths = (state_bounds[:,1] - state_bounds[:,0]) / num_tiles
         self.tile_coders = [self._create_tile_coder() for _ in range(num_tilings)]
 
