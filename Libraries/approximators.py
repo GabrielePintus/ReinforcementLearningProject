@@ -8,12 +8,12 @@ class TileCoder:
         self.num_tilings = num_tilings
         self.state_bounds = state_bounds
         # Consider different bounds for each dimension - TODO
-        self.tile_widths = (state_bounds[1] - state_bounds[0]) / num_tiles
+        self.tile_widths = (state_bounds[:,1] - state_bounds[:,0]) / num_tiles
         self.tile_coders = [self._create_tile_coder() for _ in range(num_tilings)]
 
     def _create_tile_coder(self):
         def coder(state, tiling_index):
-            scaled_state = (state - self.state_bounds[0]) / self.tile_widths
+            scaled_state = (state - self.state_bounds[:,0]) / self.tile_widths
             tile_indices = np.floor(scaled_state + tiling_index).astype(int)
             return tuple(tile_indices)
         return coder
@@ -26,6 +26,7 @@ class TileCoder:
 
 class TileCodingValueFunction:
     def __init__(self, num_tiles, num_tilings, state_bounds, action_space_n):
+        self.state_bounds = state_bounds
         self.tile_coder = TileCoder(num_tiles, num_tilings, state_bounds)
         self.Q = defaultdict(lambda: np.zeros(action_space_n))
     
