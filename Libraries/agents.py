@@ -90,6 +90,7 @@ class LearningAgent:
 
 class LearningUpdates:
 
+
     # Q-Learning Update Rule
     @staticmethod
     def q_learning_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma):
@@ -98,9 +99,9 @@ class LearningUpdates:
         
         best_next_action = np.argmax(next_q_values)
         td_target = reward + (gamma * next_q_values[best_next_action] if not done else reward)
-        td_error = alpha * (td_target - q_values[action])
+        td_error = td_target - q_values[action]
         
-        value_function.update(state, action, td_error)
+        value_function.update(state, action,  alpha * td_error)
 
 
     # SARSA Update Rule
@@ -110,27 +111,27 @@ class LearningUpdates:
         next_q_values = value_function.get_q_values(next_state)
         
         td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
-        td_error = alpha * (td_target - q_values[action])
+        td_error = td_target - q_values[action]
         
-        value_function.update(state, action, td_error)
+        value_function.update(state, action, alpha * td_error)
 
     # Expected SARSA Update Rule
     @staticmethod
-    def expected_sarsa_update(state, action, reward, next_state, done, value_function, alpha, gamma):
+    def expected_sarsa_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, epsilon = 0.8):
         q_values = value_function.get_q_values(state)
         next_q_values = value_function.get_q_values(next_state)
         
-
-        action_probabilities = np.ones_like(next_q_values) * (value_function.epsilon / len(next_q_values))
+        
+        action_probabilities = np.ones_like(next_q_values) * (epsilon / len(next_q_values))
         best_action = np.argmax(next_q_values)
-        action_probabilities[best_action] += 1 - value_function.epsilon
+        action_probabilities[best_action] += 1 - epsilon
 
         expected_next_q = np.dot(next_q_values, action_probabilities)
         
         td_target = reward + (gamma * expected_next_q if not done else reward)
-        td_error = alpha * (td_target - q_values[action])
+        td_error =  td_target - q_values[action]
         
-        value_function.update(state, action, td_error)
+        value_function.update(state, action, alpha * td_error)
 
 
     # TD(n) Update Rule (for simplicity, we use n=1 for TD(1), which is similar to SARSA)
@@ -171,10 +172,10 @@ class LearningUpdates:
 
             # Get Q-values for the first state
             q_values = value_function.get_q_values(first_state)
-            td_error = alpha * (n_step_return - q_values[first_action])
+            td_error = n_step_return - q_values[first_action]
             
             # Update the value function for the first state-action pair
-            value_function.update(first_state, first_action, td_error)
+            value_function.update(first_state, first_action, alpha * td_error)
 
             # Remove the first element from the trajectory to move forward
             trajectory.popleft()
@@ -232,10 +233,13 @@ class SarsaAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
         super().__init__(env, value_function, LearningUpdates.sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
 
+
+### ISSUE: non riusciamo a passare ad ESA il parametro epsilon definito in LearningAgent, come si fa? Per adesso glielo passiamo direttamente in expected sarsa update
 class ExpectedSarsaAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
         super().__init__(env, value_function, LearningUpdates.expected_sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
-
+        # self.epsilon = epsilon
+    
 
 class SarsaLambdaAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, el_decay=0.8):
