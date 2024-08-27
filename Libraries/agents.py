@@ -2,7 +2,6 @@ import numpy as np
 from tqdm.auto import tqdm
 from Libraries import policies
 from collections import deque
-from collections import defaultdict
 
 
 
@@ -23,7 +22,7 @@ class LearningAgent:
 
         # Initialize eligibility trace for SARSA(λ) if lambda is provided, 
         if el_decay is not None:
-            self.eligibility_trace = defaultdict(float) # each new element is initialized to 0.0 by default
+            self.eligibility_trace = {}
     
     # Choose action based on the policy
     def choose_action(self, state):
@@ -38,7 +37,7 @@ class LearningAgent:
 
     def reset_eligibility_trace(self):
         if self.eligibility_trace is not None:
-            self.eligibility_trace = defaultdict(float)
+            self.eligibility_trace = {}
     
     # Decay epsilon - i.e., exploration rate
     def update_epsilon(self):
@@ -196,6 +195,9 @@ class LearningUpdates:
         best_next_action = np.argmax(next_q_values)
         td_error = reward + (gamma * next_q_values[best_next_action] if not done else reward) - q_values[action]
         
+        if (state_tuple, action) not in eligibility_trace:
+            eligibility_trace[state_tuple, action] = 0
+
         eligibility_trace[state_tuple][action] += 1
 
         # Iterate over all the state-action pairs in the eligibility trace
@@ -203,8 +205,10 @@ class LearningUpdates:
             # Update the value function for each (state, action) pair
             value_function.update(s, a, alpha * td_error * trace_value)
             
-            # Decay eligibility trace for each (state, action) pair
-            eligibility_trace[(s, a)] *= gamma * el_decay
+            if a == best_next_action:
+                eligibility_trace[(s, a)] *= gamma * el_decay
+            else:
+                eligibility_trace[(s, a)] = 0
 
         return eligibility_trace
     
@@ -219,6 +223,9 @@ class LearningUpdates:
 
         td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
         td_error = td_target - q_values[action]  # Temporal difference error (delta)
+
+        if (state_tuple, action) not in eligibility_trace:
+            eligibility_trace[state_tuple, action] = 0
 
         eligibility_trace[(state_tuple, action)] += 1
 
