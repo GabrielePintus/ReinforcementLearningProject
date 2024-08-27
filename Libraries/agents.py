@@ -2,6 +2,7 @@ import numpy as np
 from tqdm.auto import tqdm
 from Libraries import policies
 from collections import deque
+from collections import defaultdict
 
 
 
@@ -22,7 +23,7 @@ class LearningAgent:
 
         # Initialize eligibility trace for SARSA(λ) if lambda is provided, 
         if el_decay is not None:
-            self.eligibility_trace = np.zeros((self.env.observation_space.shape[0], self.env.action_space.n)) # Shape should cover all possible (state,action) pairs
+            self.eligibility_trace = defaultdict(float) # each new element is initialized to 0.0 by default
     
     # Choose action based on the policy
     def choose_action(self, state):
@@ -37,7 +38,7 @@ class LearningAgent:
 
     def reset_eligibility_trace(self):
         if self.eligibility_trace is not None:
-            self.eligibility_trace = np.zeros((self.env.observation_space.shape[0], self.env.action_space.n)) # chack that shape is correct
+            self.eligibility_trace = defaultdict(float)
     
     # Decay epsilon - i.e., exploration rate
     def update_epsilon(self):
@@ -47,6 +48,7 @@ class LearningAgent:
     # Train the agent
     def train(self, n_episodes):
         progress_bar = tqdm(range(n_episodes), desc='Training', unit='episode')
+        rewards = np.zeros(n_episodes)
         
         for episode in progress_bar:
             state = self.env.reset()
@@ -67,8 +69,10 @@ class LearningAgent:
                 action = next_action
                 total_reward += reward
             
+            rewards[episode] = total_reward
             self.update_epsilon()
             progress_bar.set_postfix({'Total reward': total_reward, 'Epsilon': self.epsilon})
+        return np.array(rewards)
 
     # Test the agent
     def test(self, n_episodes):
@@ -185,42 +189,49 @@ class LearningUpdates:
     #Q-Learning(λ) Update Rule
     @staticmethod
     def q_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace):
+        state_tuple = tuple(state)
         q_values = value_function.get_q_values(state)
         next_q_values = value_function.get_q_values(next_state)
 
         best_next_action = np.argmax(next_q_values)
-        delta = reward + (gamma * next_q_values[best_next_action] if not done else reward) - q_values[action]
-        eligibility_trace[state][action] += 1
+        td_error = reward + (gamma * next_q_values[best_next_action] if not done else reward) - q_values[action]
+        
+        eligibility_trace[state_tuple][action] += 1
 
-        for s in range(value_function.n_states):
-            for a in range(value_function.n_actions):
-                value_function.update(s, a, delta * eligibility_trace[s][a], alpha)
-                if next_action == best_next_action: 
-                    eligibility_trace[s][a] *= gamma * el_decay
-                else:
-                    eligibility_trace[s][a] = 0
+        # Iterate over all the state-action pairs in the eligibility trace
+        for (s, a), trace_value in eligibility_trace.items():
+            # Update the value function for each (state, action) pair
+            value_function.update(s, a, alpha * td_error * trace_value)
+            
+            # Decay eligibility trace for each (state, action) pair
+            eligibility_trace[(s, a)] *= gamma * el_decay
 
         return eligibility_trace
     
-    # SARSA(λ) Update Rule
+    #Sarsa(λ) Update Rule
     @staticmethod
     def sarsa_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace):
+               
+        state_tuple = tuple(state) # need this to use state as a key in the dictionary
+
         q_values = value_function.get_q_values(state)
         next_q_values = value_function.get_q_values(next_state)
 
         td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
-        td_error = td_target - q_values[action] # In literature this would be delta
+        td_error = td_target - q_values[action]  # Temporal difference error (delta)
 
-        eligibility_trace[state][action] += 1
-    
-        for s in range(value_function.n_states):
-            print(s)
-            for a in range(value_function.n_actions):
-                print(a)
-                value_function.update(s, a, alpha * td_error * eligibility_trace[s][a])
-                eligibility_trace[s][a] *= gamma * el_decay
-        
+        eligibility_trace[(state_tuple, action)] += 1
+
+        # Iterate over all the state-action pairs in the eligibility trace
+        for (s, a), trace_value in eligibility_trace.items():
+            # Update the value function for each (state, action) pair
+            value_function.update(s, a, alpha * td_error * trace_value)
+            
+            # Decay eligibility trace for each (state, action) pair
+            eligibility_trace[(s, a)] *= gamma * el_decay
+
         return eligibility_trace
+
 
 
 

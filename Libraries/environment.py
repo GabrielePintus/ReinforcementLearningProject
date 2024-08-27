@@ -224,5 +224,8 @@ class MarketMakerEnv(gym.Env):
             'psi_b': psi_b,
             'phi': phi,
         }
+        # Non andiamo mai avanti nel LOB senza questo?
+        self.observation_space = self.market_book_data[self.t,:]
+        print("OBSERVATION SPACE: ", self.observation_space)
         return self.observation_space, reward, done, info
 
