@@ -98,9 +98,9 @@ class LearningUpdates:
         
         best_next_action = np.argmax(next_q_values)
         td_target = reward + (gamma * next_q_values[best_next_action] if not done else reward)
-        td_error = td_target - q_values[action]
+        td_error = alpha * (td_target - q_values[action])
         
-        value_function.update(state, action, td_error, alpha)
+        value_function.update(state, action, td_error)
 
 
     # SARSA Update Rule
@@ -110,7 +110,25 @@ class LearningUpdates:
         next_q_values = value_function.get_q_values(next_state)
         
         td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
-        td_error = alpha*(td_target - q_values[action])
+        td_error = alpha * (td_target - q_values[action])
+        
+        value_function.update(state, action, td_error)
+
+    # Expected SARSA Update Rule
+    @staticmethod
+    def expected_sarsa_update(state, action, reward, next_state, done, value_function, alpha, gamma):
+        q_values = value_function.get_q_values(state)
+        next_q_values = value_function.get_q_values(next_state)
+        
+
+        action_probabilities = np.ones_like(next_q_values) * (value_function.epsilon / len(next_q_values))
+        best_action = np.argmax(next_q_values)
+        action_probabilities[best_action] += 1 - value_function.epsilon
+
+        expected_next_q = np.dot(next_q_values, action_probabilities)
+        
+        td_target = reward + (gamma * expected_next_q if not done else reward)
+        td_error = alpha * (td_target - q_values[action])
         
         value_function.update(state, action, td_error)
 
@@ -153,10 +171,10 @@ class LearningUpdates:
 
             # Get Q-values for the first state
             q_values = value_function.get_q_values(first_state)
-            td_error = n_step_return - q_values[first_action]
+            td_error = alpha * (n_step_return - q_values[first_action])
             
             # Update the value function for the first state-action pair
-            value_function.update(first_state, first_action, td_error, alpha)
+            value_function.update(first_state, first_action, td_error)
 
             # Remove the first element from the trajectory to move forward
             trajectory.popleft()
@@ -165,7 +183,7 @@ class LearningUpdates:
     
     #Q-Learning(λ) Update Rule
     @staticmethod
-    def q_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, lambda_, eligibility_trace):
+    def q_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace):
         q_values = value_function.get_q_values(state)
         next_q_values = value_function.get_q_values(next_state)
 
@@ -176,8 +194,8 @@ class LearningUpdates:
         for s in range(value_function.n_states):
             for a in range(value_function.n_actions):
                 value_function.update(s, a, delta * eligibility_trace[s][a], alpha)
-                if next_action == best_next_action: #is this conditional decay correct?
-                    eligibility_trace[s][a] *= gamma * lambda_
+                if next_action == best_next_action: 
+                    eligibility_trace[s][a] *= gamma * el_decay
                 else:
                     eligibility_trace[s][a] = 0
 
@@ -185,7 +203,7 @@ class LearningUpdates:
     
     # SARSA(λ) Update Rule
     @staticmethod
-    def sarsa_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, lambda_, eligibility_trace):
+    def sarsa_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace):
         q_values = value_function.get_q_values(state)
         next_q_values = value_function.get_q_values(next_state)
 
@@ -195,7 +213,7 @@ class LearningUpdates:
         for s in range(value_function.n_states):
             for a in range(value_function.n_actions):
                 value_function.update(s, a,delta * eligibility_trace[s][a], alpha)
-                eligibility_trace[s][a] *= gamma * lambda_
+                eligibility_trace[s][a] *= gamma * el_decay
         
         return eligibility_trace
 
@@ -214,12 +232,16 @@ class SarsaAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
         super().__init__(env, value_function, LearningUpdates.sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
 
+class ExpectedSarsaAgent(LearningAgent):
+    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
+        super().__init__(env, value_function, LearningUpdates.expected_sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
+
 
 class SarsaLambdaAgent(LearningAgent):
-    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, lambda_=0.5):
-        super().__init__(env, value_function, LearningUpdates.sarsa_lambda_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min, lambda_)
+    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, el_decay=0.8):
+        super().__init__(env, value_function, LearningUpdates.sarsa_lambda_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min, el_decay)
 
 class QLambdaAgent(LearningAgent):
-    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, lambda_=0.5):
-        super().__init__(env, value_function, LearningUpdates.q_lambda_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min, lambda_)
+    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, el_decay=0.8):
+        super().__init__(env, value_function, LearningUpdates.q_lambda_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min, el_decay)
         
