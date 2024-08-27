@@ -6,7 +6,7 @@ from collections import deque
 
 
 class LearningAgent:
-    def __init__(self, env, value_function, update_rule, policy, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
+    def __init__(self, env, value_function, update_rule, policy, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, lambda_=None):   
         self.env = env
         self.value_function = value_function  # Generalized value function approximator
         self.update_rule = update_rule  # Generalized update rule (e.g., Q-learning, SARSA)
@@ -16,6 +16,13 @@ class LearningAgent:
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
+        self.lambda_ = lambda_
+
+        # Initialize eligibility trace for SARSA(λ) if lambda is provided
+        if lambda_ is not None:
+            self.eligibility_trace = np.zeros((self.env.observation_space.shape[0], self.env.action_space.shape[0])) # do we have an observation space?
+        else:
+            self.eligibility_trace = None
     
     # Choose action based on the policy
     def choose_action(self, state):
@@ -23,7 +30,14 @@ class LearningAgent:
     
     # Update the value function using the specified update rule
     def learn(self, state, action, reward, next_state, next_action, done):
-        self.update_rule(state, action, reward, next_state, next_action, done, self.value_function, self.alpha, self.gamma)
+        if self.lambda_ is not None:
+            self.update_rule(state, action, reward, next_state, next_action, done, self.value_function, self.alpha, self.gamma, self.lambda_, self.eligibility_trace)
+        else:
+            self.update_rule(state, action, reward, next_state, next_action, done, self.value_function, self.alpha, self.gamma)
+
+    def reset_eligibility_trace(self):
+        if self.eligibility_trace is not None:
+            self.eligibility_trace = np.zeros((self.env.observation_space.shape[0], self.env.action_space.shape[0]))
     
     # Decay epsilon - i.e., exploration rate
     def update_epsilon(self):
@@ -33,13 +47,15 @@ class LearningAgent:
     # Train the agent
     def train(self, n_episodes):
         progress_bar = tqdm(range(n_episodes), desc='Training', unit='episode')
-        rewards = np.zeros(n_episodes)
         
         for episode in progress_bar:
             state = self.env.reset()
             action = self.choose_action(state)
             done = False
             total_reward = 0
+
+            # Reset the eligibility trace if applicable
+            self.reset_eligibility_trace()
 
             while not done:
                 next_state, reward, done, _ = self.env.step(action)
@@ -50,13 +66,9 @@ class LearningAgent:
                 state = next_state
                 action = next_action
                 total_reward += reward
-
-            rewards[episode] = total_reward
             
             self.update_epsilon()
             progress_bar.set_postfix({'Total reward': total_reward, 'Epsilon': self.epsilon})
-
-        return np.array(rewards)
 
     # Test the agent
     def test(self, n_episodes):
@@ -97,24 +109,7 @@ class LearningUpdates:
         q_values = value_function.get_q_values(state)
         next_q_values = value_function.get_q_values(next_state)
         
-        td_target = reward + (gamma * next_q_values[next_action] if not done else reward) 
-        td_error = td_target - q_values[action]
-        
-        value_function.update(state, action, td_error, alpha)
-
-    # Expected SARSA Update Rule
-    @staticmethod
-    def expected_sarsa_update(state, action, reward, next_state, done, value_function, alpha, gamma):
-        q_values = value_function.get_q_values(state)
-        next_q_values = value_function.get_q_values(next_state)
-
-        action_probabilities = np.ones_like(next_q_values) * (value_function.epsilon / len(next_q_values))
-        best_action = np.argmax(next_q_values)
-        action_probabilities[best_action] += 1 - value_function.epsilon
-
-        expected_next_q = np.dot(next_q_values, action_probabilities)
-        
-        td_target = reward + (gamma * expected_next_q if not done else reward)
+        td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
         td_error = td_target - q_values[action]
         
         value_function.update(state, action, td_error, alpha)
@@ -167,6 +162,42 @@ class LearningUpdates:
             trajectory.popleft()
 
         return trajectory  # Return the updated trajectory
+    
+    #Q-Learning(λ) Update Rule
+    @staticmethod
+    def q_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, lambda_, eligibility_trace):
+        q_values = value_function.get_q_values(state)
+        next_q_values = value_function.get_q_values(next_state)
+
+        best_next_action = np.argmax(next_q_values)
+        delta = reward + (gamma * next_q_values[best_next_action] if not done else reward) - q_values[action]
+        eligibility_trace[state][action] += 1
+
+        for s in range(value_function.n_states):
+            for a in range(value_function.n_actions):
+                value_function.update(s, a, delta * eligibility_trace[s][a], alpha)
+                if next_action == best_next_action: #is this conditional decay correct?
+                    eligibility_trace[s][a] *= gamma * lambda_
+                else:
+                    eligibility_trace[s][a] = 0
+
+        return eligibility_trace
+    
+    # SARSA(λ) Update Rule
+    @staticmethod
+    def sarsa_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, lambda_, eligibility_trace):
+        q_values = value_function.get_q_values(state)
+        next_q_values = value_function.get_q_values(next_state)
+
+        delta = reward + (gamma * next_q_values[next_action] if not done else reward) - q_values[action] 
+        eligibility_trace[state][action] += 1
+    
+        for s in range(value_function.n_states):
+            for a in range(value_function.n_actions):
+                value_function.update(s, a,delta * eligibility_trace[s][a], alpha)
+                eligibility_trace[s][a] *= gamma * lambda_
+        
+        return eligibility_trace
 
 
 
@@ -183,6 +214,12 @@ class SarsaAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
         super().__init__(env, value_function, LearningUpdates.sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
 
-class ExpectedSarsaAgent(LearningAgent):
-    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
-        super().__init__(env, value_function, LearningUpdates.expected_sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
+
+class SarsaLambdaAgent(LearningAgent):
+    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, lambda_=0.5):
+        super().__init__(env, value_function, LearningUpdates.sarsa_lambda_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min, lambda_)
+
+class QLambdaAgent(LearningAgent):
+    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, lambda_=0.5):
+        super().__init__(env, value_function, LearningUpdates.q_lambda_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min, lambda_)
+        
