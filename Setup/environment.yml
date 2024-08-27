@@ -9,4 +9,4 @@ dependencies:
   - pip
   - pip:
       - gym
-      - tdqm
+      - tqdm
