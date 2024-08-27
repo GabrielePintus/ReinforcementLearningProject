@@ -208,12 +208,16 @@ class LearningUpdates:
         q_values = value_function.get_q_values(state)
         next_q_values = value_function.get_q_values(next_state)
 
-        delta = reward + (gamma * next_q_values[next_action] if not done else reward) - q_values[action] 
+        td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
+        td_error = td_target - q_values[action] # In literature this would be delta
+
         eligibility_trace[state][action] += 1
     
         for s in range(value_function.n_states):
+            print(s)
             for a in range(value_function.n_actions):
-                value_function.update(s, a,delta * eligibility_trace[s][a], alpha)
+                print(a)
+                value_function.update(s, a, alpha * td_error * eligibility_trace[s][a])
                 eligibility_trace[s][a] *= gamma * el_decay
         
         return eligibility_trace
