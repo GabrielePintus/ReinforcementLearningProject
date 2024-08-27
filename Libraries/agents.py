@@ -6,7 +6,8 @@ from collections import deque
 
 
 class LearningAgent:
-    def __init__(self, env, value_function, update_rule, policy, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, lambda_=None):   
+
+    def __init__(self, env, value_function, update_rule, policy, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, el_decay=None):   
         self.env = env
         self.value_function = value_function  # Generalized value function approximator
         self.update_rule = update_rule  # Generalized update rule (e.g., Q-learning, SARSA)
@@ -16,13 +17,12 @@ class LearningAgent:
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
-        self.lambda_ = lambda_
+        self.el_decay = el_decay    # eligibility traces lambda decay term
+        self.eligibility_trace = None
 
-        # Initialize eligibility trace for SARSA(λ) if lambda is provided
-        if lambda_ is not None:
-            self.eligibility_trace = np.zeros((self.env.observation_space.shape[0], self.env.action_space.shape[0])) # do we have an observation space?
-        else:
-            self.eligibility_trace = None
+        # Initialize eligibility trace for SARSA(λ) if lambda is provided, 
+        if el_decay is not None:
+            self.eligibility_trace = np.zeros((self.env.observation_space.shape[0], self.env.action_space.n)) # Shape should cover all possible (state,action) pairs
     
     # Choose action based on the policy
     def choose_action(self, state):
@@ -30,14 +30,14 @@ class LearningAgent:
     
     # Update the value function using the specified update rule
     def learn(self, state, action, reward, next_state, next_action, done):
-        if self.lambda_ is not None:
-            self.update_rule(state, action, reward, next_state, next_action, done, self.value_function, self.alpha, self.gamma, self.lambda_, self.eligibility_trace)
+        if self.el_decay is not None:
+            self.update_rule(state, action, reward, next_state, next_action, done, self.value_function, self.alpha, self.gamma, self.el_decay, self.eligibility_trace)
         else:
             self.update_rule(state, action, reward, next_state, next_action, done, self.value_function, self.alpha, self.gamma)
 
     def reset_eligibility_trace(self):
         if self.eligibility_trace is not None:
-            self.eligibility_trace = np.zeros((self.env.observation_space.shape[0], self.env.action_space.shape[0]))
+            self.eligibility_trace = np.zeros((self.env.observation_space.shape[0], self.env.action_space.n)) # chack that shape is correct
     
     # Decay epsilon - i.e., exploration rate
     def update_epsilon(self):
@@ -110,9 +110,9 @@ class LearningUpdates:
         next_q_values = value_function.get_q_values(next_state)
         
         td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
-        td_error = td_target - q_values[action]
+        td_error = alpha*(td_target - q_values[action])
         
-        value_function.update(state, action, td_error, alpha)
+        value_function.update(state, action, td_error)
 
 
     # TD(n) Update Rule (for simplicity, we use n=1 for TD(1), which is similar to SARSA)
