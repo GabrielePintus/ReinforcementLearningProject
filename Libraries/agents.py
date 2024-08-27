@@ -196,9 +196,9 @@ class LearningUpdates:
         td_error = reward + (gamma * next_q_values[best_next_action] if not done else reward) - q_values[action]
         
         if (state_tuple, action) not in eligibility_trace:
-            eligibility_trace[state_tuple, action] = 0
+            eligibility_trace[(state_tuple, action)] = 0
 
-        eligibility_trace[state_tuple][action] += 1
+        eligibility_trace[(state_tuple, action)] += 1
 
         # Iterate over all the state-action pairs in the eligibility trace
         for (s, a), trace_value in eligibility_trace.items():
@@ -225,7 +225,7 @@ class LearningUpdates:
         td_error = td_target - q_values[action]  # Temporal difference error (delta)
 
         if (state_tuple, action) not in eligibility_trace:
-            eligibility_trace[state_tuple, action] = 0
+            eligibility_trace[(state_tuple, action)] = 0
 
         eligibility_trace[(state_tuple, action)] += 1
 
