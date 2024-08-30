@@ -54,7 +54,7 @@ class DataGenerator:
     def __init__(self, filename: str, levels: int = 1, horizon: int = 100, sequential: bool = False):
         self.data = DataGenerator._generator(filename, levels)
         self.horizon = horizon
-        self.length = len(self.data) - self.horizon
+        self.length = len(self.data) - self.horizon + 1
         self.sequential = sequential
         self.indexes = list(range(self.length))
         if not sequential:
