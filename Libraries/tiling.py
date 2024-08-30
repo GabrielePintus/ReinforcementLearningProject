@@ -18,7 +18,7 @@ class TileEncodingApproximator:
         offset : float
     ):
         # Check the input arguments
-        assert len(bounds) == state_dim
+        # assert len(bounds) == state_dim + 1
         assert n_tiles > 0
         assert n_tilings > 0
         assert offset >= 0 and offset < 1
@@ -39,6 +39,7 @@ class TileEncodingApproximator:
     
     @staticmethod
     def normalize_state(state, bounds):
+        state = np.array(state)
         return (state - bounds[:, 0]) / (bounds[:, 1] - bounds[:, 0])
     
     def encode(self, state):
@@ -73,191 +74,45 @@ class TileEncodingApproximator:
 #     ):
 #         super().__init__(state_dim, bounds, n_tiles, n_tilings, offset)
         
-#         # Initialize the coefficient matrix with shape (n_tilings, n_tiles ** state_dim)
-#         self.coefficients = np.zeros((n_tilings, n_tiles ** state_dim))
-    
-#     def get_feature_vector(self, encoding):
-#         """
-#         Create a sparse one-hot encoded feature vector for the given encoding.
-#         """
-#         feature_vector = np.zeros(self.coefficients.size)
-#         for i in range(self.n_tilings):
-#             tile_index = np.ravel_multi_index(encoding[i].astype(int), (self.n_tiles,) * self.state_dim)
-#             feature_index = i * (self.n_tiles ** self.state_dim) + tile_index
-#             feature_vector[feature_index] = 1  # Set the feature corresponding to the active tile to 1
-#         return feature_vector
-    
-#     def evaluate(self, state):
-#         """
-#         Estimate the value of the given state using the dot product of the feature vector and coefficients.
-#         """
-#         encoding = self.encode(state)
-#         feature_vector = self.get_feature_vector(encoding)
-        
-#         # Flatten the coefficients and compute the dot product
-#         value = np.dot(self.coefficients.flatten(), feature_vector)
-#         return value
-    
-#     def update(self, state, target, alpha=0.1):
-#         """
-#         Update the coefficients based on the target value and learning rate alpha.
-#         """
-#         encoding = self.encode(state)
-#         feature_vector = self.get_feature_vector(encoding)
-        
-#         # Compute the current prediction
-#         prediction = self.evaluate(state)
-        
-#         # Compute the error
-#         error = target - prediction
-        
-#         # Update the coefficients for the active features
-#         self.coefficients += (alpha * error * feature_vector).reshape(self.coefficients.shape)
-
-
-# class LinearCombinationTileEncodingLight(TileEncodingApproximator):
-#     """
-#     Linear combination of tile encoding features for function approximation
-#     using dot product.
-#     """
-#     def __init__(
-#         self,
-#         state_dim: int,
-#         bounds: np.ndarray,
-#         n_tiles: int,
-#         n_tilings: int,
-#         offset: float
-#     ):
-#         super().__init__(state_dim, bounds, n_tiles, n_tilings, offset)
-        
 #         # Initialize the coefficient matrix
-#         self.coefficients = 
-
-
-
-# from scipy.sparse import coo_matrix, lil_matrix, csr_matrix
-# class LinearCombinationTileEncodingSparse(TileEncodingApproximator):
-#     """
-#     Linear combination of tile encoding features for function approximation
-#     using dot product.
-#     """
-#     def __init__(
-#         self,
-#         state_dim: int,
-#         bounds: np.ndarray,
-#         n_tiles: int,
-#         n_tilings: int,
-#         offset: float
-#     ):
-#         super().__init__(state_dim, bounds, n_tiles, n_tilings, offset)
-        
-#         # Initialize the coefficient matrix with shape (n_tilings, n_tiles ** state_dim)
-#         # self.coefficients = np.zeros((n_tilings, n_tiles ** state_dim))
-#         print(f'Creating sparse matrix with shape ({n_tilings}, {n_tiles ** state_dim})')
-#         self.coefficients = csr_matrix((n_tilings, n_tiles ** state_dim), dtype=np.float32)
-    
-#     def get_feature_vector(self, encoding):
-#         """
-#         Create a sparse one-hot encoded feature vector for the given encoding.
-#         """
-#         feature_size = self.n_tilings * self.n_tiles ** self.state_dim
-#         feature_vector = np.zeros(feature_size)
-#         for i in range(self.n_tilings):
-#             tile_index = np.ravel_multi_index(encoding[i].astype(int), (self.n_tiles,) * self.state_dim)
-#             feature_index = i * (self.n_tiles ** self.state_dim) + tile_index
-#             feature_vector[feature_index] = 1  # Set the feature corresponding to the active tile to 1
-#         return feature_vector
+#         # The coefficient matrix shape will be (n_tilings, n_tiles^state_dim)
+#         # Each tile has a coefficient, and we have n_tilings such sets of coefficients
+#         self.coefficients = np.random.randn(self.n_tilings, *(self.n_tiles,) * self.state_dim)
     
 #     def evaluate(self, state):
-#         """
-#         Estimate the value of the given state using the dot product of the feature vector and coefficients.
-#         """
-#         encoding = self.encode(state)
-#         feature_vector = self.get_feature_vector(encoding)
+#         # Encode the state into tile indices
+#         encoded_tiles = self.encode(state)
         
-#         # Flatten the coefficients and compute the dot product
-#         # value = np.dot(self.coefficients.flatten(), feature_vector)
-#         value = 0.0
-#         for i in range(self.coefficients.shape[0]):
-#             i_a = i*self.n_tiles**self.state_dim
-#             i_b = (i+1)*self.n_tiles**self.state_dim            
-#             value += self.coefficients[i,:].dot(feature_vector[i_a:i_b])
-#         return value
+#         # The approximation is a linear combination of the active tiles' coefficients
+#         approximation = 0
+#         for i in range(self.n_tilings):
+#             indices = tuple(encoded_tiles[i].astype(int))
+#             approximation += self.coefficients[i][indices]
+        
+#         return approximation
     
-#     def update(self, state, target, alpha=0.1):
-#         """
-#         Update the coefficients based on the target value and learning rate alpha.
-#         """
-#         encoding = self.encode(state)
-#         feature_vector = self.get_feature_vector(encoding)
+#     def update(self, state, target, learning_rate):
+#         # Encode the state into tile indices
+#         encoded_tiles = self.encode(state)
         
-#         # Compute the current prediction
+#         # Calculate the prediction for the given state
 #         prediction = self.evaluate(state)
         
-#         # Compute the error
+#         # Calculate the error (difference between target and prediction)
 #         error = target - prediction
         
-#         # Update the coefficients for the active features
-#         self.coefficients += (alpha * error * feature_vector).reshape(self.coefficients.shape)
-
-
+#         # Update each of the coefficients associated with the active tiles
+#         for i in range(self.n_tilings):
+#             indices = tuple(encoded_tiles[i].astype(int))
+#             self.coefficients[i][indices] += learning_rate * error
+            
 #     def get_q_values(self, state):
 #         return self.evaluate(state)
+    
+# class LinearCombinationTileEncoding(TileEncodingApproximator):
 
 
 
-class LinearCombinationTileEncoding(TileEncodingApproximator):
-    """
-    Linear combination of tile encoding features for function approximation
-    using dot product.
-    """
-    def __init__(
-        self,
-        state_dim: int,
-        bounds: np.ndarray,
-        n_tiles: int,
-        n_tilings: int,
-        offset: float
-    ):
-        super().__init__(state_dim, bounds, n_tiles, n_tilings, offset)
-        
-        # Initialize the coefficient matrix
-        # The coefficient matrix shape will be (n_tilings, n_tiles^state_dim)
-        # Each tile has a coefficient, and we have n_tilings such sets of coefficients
-        self.coefficients = np.random.randn(self.n_tilings, *(self.n_tiles,) * self.state_dim)
-    
-    def evaluate(self, state):
-        # Encode the state into tile indices
-        encoded_tiles = self.encode(state)
-        
-        # The approximation is a linear combination of the active tiles' coefficients
-        approximation = 0
-        for i in range(self.n_tilings):
-            indices = tuple(encoded_tiles[i].astype(int))
-            approximation += self.coefficients[i][indices]
-        
-        return approximation
-    
-    def update(self, state, target, learning_rate):
-        # Encode the state into tile indices
-        encoded_tiles = self.encode(state)
-        
-        # Calculate the prediction for the given state
-        prediction = self.evaluate(state)
-        
-        # Calculate the error (difference between target and prediction)
-        error = target - prediction
-        
-        # Update each of the coefficients associated with the active tiles
-        for i in range(self.n_tilings):
-            indices = tuple(encoded_tiles[i].astype(int))
-            self.coefficients[i][indices] += learning_rate * error
-            
-    def get_q_values(self, state):
-        return self.evaluate(state)
-    
-    
-    
 class SparseTileEncodingApproximator(TileEncodingApproximator):
     """
     Tile coding with hashing for a memory-efficient linear combination of features.
@@ -301,8 +156,51 @@ class SparseTileEncodingApproximator(TileEncodingApproximator):
         """
         return int((np.sum(tile_indices) + tiling_index) % self.n_weights)
 
-    def get_q_values(self, state):
-        return self.evaluate(state)
+    def get_q_values(self, state, actions):
+        q_values = dict()
+        for action in actions:
+            state_couple = np.concatenate((state, [action]))
+            q_values[action] = self.evaluate(state_couple)
+        return q_values
+
+
+
+
+
+class LCTC_ValueFunction:
+    """
+        Linear Combination of Tile Coding Value Function
+        You can use this class to combine multiple value functions
+    """
+
+    def __init__(self, value_functions, lctc_weights):
+        self.value_functions = value_functions
+        self.lctc_weights = lctc_weights
+        self.n = len(value_functions)
+
+    def evaluate(self, states):
+        values = np.zeros(self.n)
+        for i, state in enumerate(states):
+            values[i] = self.value_functions[i].evaluate(state)
+        value = np.dot(values, self.lctc_weights)
+        return value
+    
+    def update(self, states, target, alpha):
+        for i, state in enumerate(states):
+            self.value_functions[i].update(state, target, alpha)
+
+    def get_q_values(self, states, actions):
+        q_values = dict()
+        for action in actions:
+            state_couples = [np.concatenate((state, [action])) for state in states]
+            q_values[action] = self.evaluate(state_couples)
+        return q_values
+
+
+        
+
+
+
 
 
 if __name__ == '__main__':
@@ -318,40 +216,45 @@ if __name__ == '__main__':
     
     
     # Example usage
-    state_dim = 2
-    bounds = np.array([[0, 1], [0, 1]])
+    bounds_1 = np.array([[0, 1], [0, 1], [0,2]])
+    bounds_2 = np.array([[0, 1], [0, 1], [0, 1], [0,2]])
     n_tiles = 8
     n_tilings = 4
     offset = 0.2
     
-    state = np.array([0.5, 0.75])
+    state_1 = np.array([0.5, 0.75])
+    state_2 = np.array([0.1, 0.9, 0.2])
+    state_couple_1 = np.concatenate((state_1, [1]))
+    state_couple_2 = np.concatenate((state_2, [2]))
     target_value = 2.3
 
-    all_values = []
-    for n_tilings in [1, 2, 4, 8]:
-        value_function = SparseTileEncodingApproximator(state_dim, bounds, n_tiles, n_tilings, offset, n_weights=10)
-        print(f'RAM memory usage: {memory_usage()} MB')
+    value_function_1 = SparseTileEncodingApproximator(state_couple_1.size, bounds_1, n_tiles, n_tilings, offset, 100)
+    value_function_2 = SparseTileEncodingApproximator(state_couple_2.size, bounds_2, n_tiles, n_tilings, offset, 100)
 
-        
-        value = value_function.evaluate(state)
-        # print("Initial value:", value)
+    # Value function 1,2 evaluation
+    evaluation = value_function_1.evaluate(state_couple_1)
+    print('Initial evaluation 1:', evaluation)
+    evaluation = value_function_2.evaluate(state_couple_2)
+    print('Initial evaluation 2:', evaluation)
 
-        # Update the value function
-        values = []
-        for i in range(50):
-            value_function.update(state, target=target_value, alpha=0.05)
-            value = value_function.evaluate(state)
-            values.append(value)
-        all_values.append(values)        
-    
-    import matplotlib.pyplot as plt
-    
-    for i, values in enumerate(all_values):
-        plt.plot(values, label=f'{2**(i)} tilings')
-    
-    # Add horizontal line for target value
-    plt.axhline(y=target_value, color='r', linestyle='--', label='Target value')
-    plt.xlabel('Update steps')
-    plt.ylabel('Value')
-    plt.legend()
-    plt.show()
+    value_functions = [value_function_1, value_function_2]
+    lctc_weights = np.array([0.5, 0.5])
+    value_function = LCTC_ValueFunction(value_functions, lctc_weights)
+
+    print('Memory usage: {:.2f} MB'.format(memory_usage()))
+
+    evaluation = value_function.evaluate([state_couple_1, state_couple_2])
+    print('Initial evaluation:', evaluation)
+    # Update the value function
+    value_function.update([state_couple_1, state_couple_2], target_value, 0.1)
+    evaluation = value_function.evaluate([state_couple_1, state_couple_2])
+    print('Updated evaluation:', evaluation)
+
+    # Get the Q-values
+    actions = [0, 1, 2]
+    q_values = value_function.get_q_values([state_1, state_2], actions)
+    # print the Q-values
+    for action, q_value in q_values.items():
+        print('Q-value for action {}: {:.2f}'.format(action, q_value))
+
+

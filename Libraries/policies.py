@@ -14,7 +14,8 @@ def epsilon_greedy_policy(state, value_function, env, epsilon):
     if np.random.random() < epsilon:
         return env.action_space.sample()  # Explore
     else:
-        q_values = value_function.get_q_values(state)
+        actions = list(range(env.action_space.n))
+        q_values = value_function.get_q_values(state, actions)
         return np.argmax(q_values)  # Exploit
 
 

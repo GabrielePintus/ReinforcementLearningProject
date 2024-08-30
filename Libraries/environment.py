@@ -1,6 +1,8 @@
 import gym
 import gym.spaces
 import numpy as np
+from numpy import inf
+from numpy.core.multiarray import array as array
 
 
 
@@ -75,6 +77,7 @@ class MarketMakerEnv(gym.Env):
         # 1 = (1,1), ..., 5 = (5,5), 6 = (1,3), 7 = (3,1), 8 = (2,5), 9 = (5,2)
         self.action_space = gym.spaces.Discrete(10)
         
+        
         # Additional variables
         self.t = 0
         self.horizon = horizon
@@ -92,6 +95,10 @@ class MarketMakerEnv(gym.Env):
         # Variables for additional information
         self.total_orders_placed = 0
         self.total_orders_executed = 0
+
+        # State space dimension
+        self.states_dim = [len(s) for s in self.get_state()]
+        self.state_dim = sum(self.states_dim)
     
     # Given the current open position, check if some of the orders can be matched and execute them
     def match(self):
@@ -142,7 +149,7 @@ class MarketMakerEnv(gym.Env):
         self.total_orders_placed = 0
         self.total_orders_executed = 0
         
-        return self.observation_space
+        return self.get_state()
     
     def reward(self):
         """
@@ -211,6 +218,9 @@ class MarketMakerEnv(gym.Env):
         self.agent_state[0] += matched_a - matched_b
 
 
+    def get_state(self):
+        return [self.observation_space]
+
     def step(self, action):
         self.transition(action)
         reward, psi_a, psi_b, phi = self.reward()
@@ -226,6 +236,65 @@ class MarketMakerEnv(gym.Env):
         }
         # Non andiamo mai avanti nel LOB senza questo?
         self.observation_space = self.market_book_data[self.t,:]
-        print("OBSERVATION SPACE: ", self.observation_space)
-        return self.observation_space, reward, done, info
+        return self.get_state(), reward, done, info
 
+
+
+class Case1MarketMakerEnv(MarketMakerEnv):
+
+    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transorm=lambda x: x):
+        super().__init__(lob_data, horizon, phi_transorm)
+
+
+    # Add other 'get_X_state' methods and override 'get_state' method
+    def get_agent_state(self):
+        return self.agent_state
+    
+    def get_state(self):
+        return [
+            self.get_agent_state(),
+        ]
+
+class Case2MarketMakerEnv(MarketMakerEnv):
+
+    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transorm=lambda x: x):
+        super().__init__(lob_data, horizon, phi_transorm)
+
+
+    # Add other 'get_X_state' methods and override 'get_state' method
+    def get_agent_state(self):
+        return self.agent_state
+    
+    def get_market_state(self):
+        return self.observation_space
+    
+    def get_state(self):
+        return [
+            self.get_agent_state(),
+            self.get_market_state()
+        ]
+
+class Case3MarketMakerEnv(MarketMakerEnv):
+
+    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transorm=lambda x: x):
+        super().__init__(lob_data, horizon, phi_transorm)
+
+
+    # Add other 'get_X_state' methods and override 'get_state' method
+    def get_agent_state(self):
+        return self.agent_state
+    
+    def get_market_state(self):
+        return self.observation_space
+    
+    def get_full_state(self):
+        # Concatenate the agent state and the market state
+        full = np.concatenate([self.get_agent_state(), self.get_market_state()])
+        return full
+    
+    def get_state(self):
+        return [
+            self.get_agent_state(),
+            self.get_market_state(),
+            self.get_full_state()
+        ]

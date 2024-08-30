@@ -28,6 +28,7 @@ class LearningAgent:
     def choose_action(self, state):
         return self.policy(state, self.value_function, self.env, self.epsilon)
     
+
     # Update the value function using the specified update rule
     def learn(self, state, action, reward, next_state, next_action, done):
         if self.el_decay is not None:
@@ -48,6 +49,7 @@ class LearningAgent:
     def train(self, n_episodes):
         progress_bar = tqdm(range(n_episodes), desc='Training', unit='episode')
         rewards = np.zeros(n_episodes)
+        infos = dict()
         
         for episode in progress_bar:
             state = self.env.reset()
@@ -57,9 +59,11 @@ class LearningAgent:
 
             # Reset the eligibility trace if applicable
             self.reset_eligibility_trace()
+            episode_infos = []
 
             while not done:
-                next_state, reward, done, _ = self.env.step(action)
+                next_state, reward, done, info = self.env.step(action)
+                episode_infos.append(info)
                 next_action = self.choose_action(next_state)
                 
                 self.learn(state, action, reward, next_state, next_action, done)
@@ -69,30 +73,34 @@ class LearningAgent:
                 total_reward += reward
             
             rewards[episode] = total_reward
+            infos[episode] = episode_infos
             self.update_epsilon()
             progress_bar.set_postfix({'Total reward': total_reward, 'Epsilon': self.epsilon})
-        return np.array(rewards)
+        return np.array(rewards), infos
 
     # Test the agent
     def test(self, n_episodes):
         all_rewards = []
+        infos = []
         for episode in tqdm(range(n_episodes), desc='Testing', unit='episode'):
             state = self.env.reset()
             done = False
             rewards = []
+            episode_infos = []
             while not done:
                 action = self.choose_action(state)
-                state, reward, done, _ = self.env.step(action)
+                state, reward, done, info = self.env.step(action)
                 rewards.append(reward)
+                episode_infos.append(info)
             rewards = np.array(rewards)
             all_rewards.append(rewards)
-        return np.array(all_rewards).mean(axis=0)
+            infos.append(episode_infos)
+        return np.array(all_rewards).mean(axis=0), infos
 
 
 
 
 class LearningUpdates:
-
 
     # Q-Learning Update Rule
     @staticmethod
@@ -187,55 +195,77 @@ class LearningUpdates:
     
     #Q-Learning(λ) Update Rule
     @staticmethod
-    def q_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace):
-        state_tuple = tuple(state)
-        q_values = value_function.get_q_values(state)
-        next_q_values = value_function.get_q_values(next_state)
+    def q_lambda_update(states, action, reward, next_states, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace, forget_threshold=1e-6):
+        actions = list(range(10))
+        q_values = value_function.get_q_values(states, actions)
+        next_q_values = value_function.get_q_values(next_states, actions)
 
         best_next_action = np.argmax(next_q_values)
         td_error = reward + (gamma * next_q_values[best_next_action] if not done else reward) - q_values[action]
         
-        if (state_tuple, action) not in eligibility_trace:
-            eligibility_trace[(state_tuple, action)] = 0
-
-        eligibility_trace[(state_tuple, action)] += 1
+        state_tuple = ( tuple(state) for state in states)
+        eligibility_trace[(state_tuple, action)] = eligibility_trace.get((state_tuple, action), 0) + 1
+        gamma_el_decay = gamma * el_decay
+        keys_to_delete = []
 
         # Iterate over all the state-action pairs in the eligibility trace
         for (s, a), trace_value in eligibility_trace.items():
+            state_couple = [ np.array(list(state)) for state in s]
+            state_couple = [ np.append(state, a) for state in state_couple]
+
             # Update the value function for each (state, action) pair
-            value_function.update(s, a, alpha * td_error * trace_value)
-            
-            if a == best_next_action:
-                eligibility_trace[(s, a)] *= gamma * el_decay
-            else:
-                eligibility_trace[(s, a)] = 0
+            value_function.update(
+                states=state_couple,
+                target=alpha * td_error * trace_value,
+                alpha=alpha
+            )
+            eligibility_trace[(s, a)] *= gamma_el_decay if a == best_next_action else 0
+
+            if eligibility_trace[(s, a)] < forget_threshold:
+                keys_to_delete.append((s, a))
+
+        # Delete the state-action pairs with trace values below the threshold
+        for key in keys_to_delete:
+            del eligibility_trace[key]
 
         return eligibility_trace
     
     #Sarsa(λ) Update Rule
     @staticmethod
-    def sarsa_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace):
-               
-        state_tuple = tuple(state) # need this to use state as a key in the dictionary
-
-        q_values = value_function.get_q_values(state)
-        next_q_values = value_function.get_q_values(next_state)
+    def sarsa_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace, forget_threshold=1e-6):
+        actions = list(range(10))
+        q_values = value_function.get_q_values(state, actions)
+        next_q_values = value_function.get_q_values(next_state, actions)
 
         td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
         td_error = td_target - q_values[action]  # Temporal difference error (delta)
 
-        if (state_tuple, action) not in eligibility_trace:
-            eligibility_trace[(state_tuple, action)] = 0
-
-        eligibility_trace[(state_tuple, action)] += 1
+        state_tuple = ( tuple(s) for s in state)
+        eligibility_trace[(state_tuple, action)] = eligibility_trace.get((state_tuple, action), 0) + 1
+        gamma_el_decay = gamma * el_decay
 
         # Iterate over all the state-action pairs in the eligibility trace
+        key_to_delete = []
         for (s, a), trace_value in eligibility_trace.items():
-            # Update the value function for each (state, action) pair
-            value_function.update(s, a, alpha * td_error * trace_value)
+            state_couple = [ np.array(list(_s)) for _s in s]
+            state_couple = [ np.append(_s, a) for _s in state_couple]
+            # print(state_couple.shape)
+            value_function.update(
+                states=state_couple,
+                target=alpha * td_error * trace_value,
+                alpha=alpha
+            )
             
             # Decay eligibility trace for each (state, action) pair
-            eligibility_trace[(s, a)] *= gamma * el_decay
+            eligibility_trace[(s, a)] *= gamma_el_decay
+
+            # Remove the state-action pair from the eligibility trace if the trace value is below a threshold
+            if eligibility_trace[(s, a)] < forget_threshold:
+                key_to_delete.append((s, a))
+
+        # Delete the state-action pairs with trace values below the threshold
+        for key in key_to_delete:
+            del eligibility_trace[key]
 
         return eligibility_trace
 

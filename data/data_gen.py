@@ -1,4 +1,6 @@
+from typing import Any
 import pandas as pd
+import random
 
 class DataGenerator:
     """Data generator from csv file.
@@ -48,16 +50,49 @@ class DataGenerator:
         # RS = Average Gain / Average Loss per un periodo di tempo (di solito 14 istanze)
 
         return LOB.dropna().reset_index(drop=True)
+    
+    def __init__(self, filename: str, levels: int = 1, horizon: int = 100, sequential: bool = False):
+        self.data = DataGenerator._generator(filename, levels)
+        self.horizon = horizon
+        self.length = len(self.data) - self.horizon
+        self.sequential = sequential
+        self.indexes = list(range(self.length))
+        if not sequential:
+            random.shuffle(self.indexes)
 
+    def __len__(self):
+        return self.length
+    
+    def get_data(self):
+        return self.data
+
+    def __getitem__(self, index: int):
+        idx = self.indexes[index]
+        return self.data.iloc[idx:idx+self.horizon].values
+    
+    def __iter__(self):
+        self.iter_idx = 0
+        return self
+    
+    def __next__(self):
+        if self.iter_idx < self.length:
+            idx = self.indexes[self.iter_idx]
+            self.iter_idx += 1
+            return self[idx]
+        else:
+            raise StopIteration
+        
 
 
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    
-    df = DataGenerator._generator('data/lob.csv', levels=1)
-    
-    # Plot mid price
-    print(df.head())
+    datagen = DataGenerator('data/lob.csv', levels=1, horizon=5)
+    i=0
+    for window in datagen:
+        print(window.shape)
+        if i == 10:
+            break
+        i += 1
+
 
     
 
