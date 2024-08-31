@@ -7,16 +7,29 @@ from collections import deque
 
 class LearningAgent:
 
-    def __init__(self, env, value_function, update_rule, policy, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, el_decay=None):   
+    def __init__(
+        self,
+        env,
+        value_function,
+        update_rule,
+        policy,
+        alpha=0.1,
+        gamma=0.99,
+        # epsilon=1.0,
+        # epsilon_decay=0.995,
+        # epsilon_min=0.01,
+        el_decay=None
+    ):   
         self.env = env
         self.value_function = value_function  # Generalized value function approximator
         self.update_rule = update_rule  # Generalized update rule (e.g., Q-learning, SARSA)
         self.policy = policy  # Generalized policy (e.g., epsilon-greedy)
         self.alpha = alpha
         self.gamma = gamma
-        self.epsilon = epsilon
-        self.epsilon_decay = epsilon_decay
-        self.epsilon_min = epsilon_min
+        #self.epsilon = epsilon
+        #self.epsilon_decay = epsilon_decay
+        #self.epsilon_min = epsilon_min
+        self.policy = policy
         self.el_decay = el_decay    # eligibility traces lambda decay term
         self.eligibility_trace = None
 
@@ -26,7 +39,8 @@ class LearningAgent:
     
     # Choose action based on the policy
     def choose_action(self, state):
-        return self.policy(state, self.value_function, self.env, self.epsilon)
+        # return self.policy(state, self.value_function, self.env, self.epsilon)
+        return self.policy(state)
     
 
     # Update the value function using the specified update rule
@@ -41,9 +55,9 @@ class LearningAgent:
             self.eligibility_trace = {}
     
     # Decay epsilon - i.e., exploration rate
-    def update_epsilon(self):
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+    # def update_epsilon(self):
+    #     if self.epsilon > self.epsilon_min:
+    #         self.epsilon *= self.epsilon_decay
 
     # Train the agent
     def train(self, n_episodes):
@@ -75,7 +89,8 @@ class LearningAgent:
             
             rewards[episode] = total_reward
             infos[episode] = episode_infos
-            self.update_epsilon()
+            # self.update_epsilon()
+            self.policy.update()
             # progress_bar.set_postfix({'Total reward': total_reward, 'Epsilon': self.epsilon})
         return np.array(rewards), infos
 
@@ -83,7 +98,7 @@ class LearningAgent:
     def test(self, n_episodes):
         all_rewards = []
         infos = []
-        for episode in tqdm(range(n_episodes), desc='Testing', unit='episode'):
+        for _ in range(n_episodes):
             state = self.env.reset()
             done = False
             rewards = []
@@ -295,8 +310,8 @@ class ExpectedSarsaAgent(LearningAgent):
     
 
 class SarsaLambdaAgent(LearningAgent):
-    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, el_decay=0.8):
-        super().__init__(env, value_function, LearningUpdates.sarsa_lambda_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min, el_decay)
+    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, policy=None, el_decay=0.8):
+        super().__init__(env, value_function, LearningUpdates.sarsa_lambda_update, policy, alpha, gamma, el_decay)
 
 class QLambdaAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, el_decay=0.8):

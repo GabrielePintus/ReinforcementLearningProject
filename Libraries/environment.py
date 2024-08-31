@@ -50,7 +50,7 @@ class MarketMakerEnv(gym.Env):
         self,
         lob_data: np.array,
         horizon=np.inf,
-        phi_transorm=lambda x: x,
+        phi_transform=lambda x: x,
     ):
         # Environment state = agent_state + observation_space
         
@@ -91,7 +91,7 @@ class MarketMakerEnv(gym.Env):
         self.v_a = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
         self.v_b = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
         self.market_order_size = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
-        self.phi_transform = phi_transorm
+        self.phi_transform = phi_transform
 
         # Variables for additional information
         self.total_orders_placed = 0
@@ -250,8 +250,8 @@ class MarketMakerEnv(gym.Env):
 
 class Case1MarketMakerEnv(MarketMakerEnv):
 
-    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transorm=lambda x: x):
-        super().__init__(lob_data, horizon, phi_transorm)
+    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transform=lambda x: x):
+        super().__init__(lob_data, horizon, phi_transform)
 
 
     # Add other 'get_X_state' methods and override 'get_state' method
@@ -265,8 +265,8 @@ class Case1MarketMakerEnv(MarketMakerEnv):
 
 class Case2MarketMakerEnv(MarketMakerEnv):
 
-    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transorm=lambda x: x):
-        super().__init__(lob_data, horizon, phi_transorm)
+    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transform=lambda x: x):
+        super().__init__(lob_data, horizon, phi_transform)
 
 
     # Add other 'get_X_state' methods and override 'get_state' method
@@ -284,8 +284,8 @@ class Case2MarketMakerEnv(MarketMakerEnv):
 
 class Case3MarketMakerEnv(MarketMakerEnv):
 
-    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transorm=lambda x: x):
-        super().__init__(lob_data, horizon, phi_transorm)
+    def __init__(self, lob_data: np.array, horizon=np.inf, phi_transform=lambda x: x):
+        super().__init__(lob_data, horizon, phi_transform)
 
 
     # Add other 'get_X_state' methods and override 'get_state' method

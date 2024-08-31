@@ -1,5 +1,59 @@
 import numpy as np
 
+
+
+
+class Policy:
+
+    def __init__(
+            self,
+            value_function,
+            env,
+        ):
+        self.value_function = value_function
+        self.env = env
+
+    def get_action(self, state):
+        raise NotImplementedError("This method should be overridden by subclasses.")
+    
+    def update(self):
+        raise NotImplementedError("This method should be overridden by subclasses.")
+
+    def __call__(self, state):
+        return self.get_action(state)
+
+
+
+
+
+class EpsilonGreedyPolicy(Policy):
+    
+        def __init__(
+                self,
+                value_function,
+                env,
+                epsilon=0.5,
+                epsilon_decay=0.9,
+                epsilon_min=0.1
+            ):
+            super().__init__(value_function, env)
+            self.epsilon = epsilon
+            self.epsilon_decay = epsilon_decay
+            self.epsilon_min = epsilon_min
+    
+        def get_action(self, state):
+            if np.random.random() < self.epsilon:
+                return self.env.action_space.sample()  # Explore
+            else:
+                actions = list(range(self.env.action_space.n))
+                q_values = self.value_function.get_q_values(state, actions)
+                return np.argmax(q_values)  # Exploit
+    
+        def update(self):
+            if self.epsilon > self.epsilon_min:
+                self.epsilon *= self.epsilon_decay
+
+
 def epsilon_greedy_policy(state, value_function, env, epsilon):
     """
     Epsilon-Greedy policy: With probability epsilon, choose a random action;
