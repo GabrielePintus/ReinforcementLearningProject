@@ -90,6 +90,7 @@ class MarketMakerEnv(gym.Env):
         self.p_b = 0
         self.v_a = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
         self.v_b = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
+        self.market_order_size = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.phi_transform = phi_transorm
 
         # Variables for additional information
@@ -190,10 +191,12 @@ class MarketMakerEnv(gym.Env):
             total_ask = sum(self.ask_book.values())
             total_bid = sum(self.bid_book.values())
             balance_volume = total_ask - total_bid
+            # market_order_size = self.market_order_size.sample()[0] * balance_volume
+            market_order_size = 1 * balance_volume
             if balance_volume > 0:
-                self.place_order(self.best_bid, balance_volume, 'bid')
+                self.place_order(self.best_bid, market_order_size, 'bid')
             elif balance_volume < 0:
-                self.place_order(self.best_ask, -balance_volume, 'ask')
+                self.place_order(self.best_ask, -market_order_size, 'ask')
         else:
             self.agent_state[2] = theta_a
             self.agent_state[3] = theta_b
@@ -206,6 +209,10 @@ class MarketMakerEnv(gym.Env):
             p_b = self.p(self.observation_space[4], theta_b, spread)
             v_a = self.v_a.sample()[0]
             v_b = self.v_b.sample()[0]
+            if self.agent_state[0] >= MarketMakerEnv.MAX_INVENTORY_SIZE:
+                v_a = 0
+            if self.agent_state[0] <= -MarketMakerEnv.MAX_INVENTORY_SIZE:
+                v_b = 0
             # Update the bid and ask books
             self.place_order(p_a, v_a, 'ask')
             self.place_order(p_b, v_b, 'bid')
@@ -230,6 +237,7 @@ class MarketMakerEnv(gym.Env):
             'total_orders_executed': self.total_orders_executed,
             'inventory': self.agent_state[0],
             'reward': reward,
+            'PnL' : psi_a + psi_b + phi,
             'psi_a': psi_a,
             'psi_b': psi_b,
             'phi': phi,

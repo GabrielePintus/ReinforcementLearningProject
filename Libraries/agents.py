@@ -47,7 +47,8 @@ class LearningAgent:
 
     # Train the agent
     def train(self, n_episodes):
-        progress_bar = tqdm(range(n_episodes), desc='Training', unit='episode')
+        # progress_bar = tqdm(range(n_episodes), desc='Training', unit='episode')
+        progress_bar = range(n_episodes)
         rewards = np.zeros(n_episodes)
         infos = dict()
         
@@ -75,7 +76,7 @@ class LearningAgent:
             rewards[episode] = total_reward
             infos[episode] = episode_infos
             self.update_epsilon()
-            progress_bar.set_postfix({'Total reward': total_reward, 'Epsilon': self.epsilon})
+            # progress_bar.set_postfix({'Total reward': total_reward, 'Epsilon': self.epsilon})
         return np.array(rewards), infos
 
     # Test the agent
