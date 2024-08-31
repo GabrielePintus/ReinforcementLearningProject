@@ -9,15 +9,15 @@ from numpy.core.multiarray import array as array
 class PhiTransform:
     
     @staticmethod
-    def PnL(x):
-        return x
+    def PnL():
+        return lambda x: x
     
     @staticmethod
-    def PnL_dampened(x, c=0.5):
+    def PnL_dampened(c=0.5):
         return lambda x: (1-c) * x
     
     @staticmethod
-    def PnL_asymm_dampened(x, c=-0.5):
+    def PnL_asymm_dampened(c=-0.5):
         return lambda x: x * (1-c) - np.abs(c*x)
         
 
