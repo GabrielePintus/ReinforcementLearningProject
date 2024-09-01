@@ -1,9 +1,10 @@
 import os
 
 # Get all stocks
-files = [ str(file) for file in os.listdir('data') if file.endswith('.parquet') ]
-stocks = [ file.split('.')[0] for file in files ]
-stocks = sorted(stocks)
+# files = [ str(file) for file in os.listdir('data') if file.endswith('.parquet') ]
+# stocks = [ file.split('.')[0] for file in files ]
+# stocks = sorted(stocks)
+stocks = ['AAPL', 'MSFT', 'SAMPO', 'KESBV']
 
 # Levels
 levels = [1, 5, 10]
