@@ -49,7 +49,7 @@ else:
 
 # Extract stock name
 stock_name = args.data_path.split('/')[-1].split('.')[0]
-base_filename = f'{stock_name}_{args.levels}_{args.reward}_{args.agent}'
+base_filename = f'output/{stock_name}_{args.levels}_{args.reward}_{args.agent}'
 
 
 
