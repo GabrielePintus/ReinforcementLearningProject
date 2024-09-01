@@ -21,7 +21,7 @@ class RLProblem:
             data_path: str = None,
             levels: int = 1,
             horizon: int = 100,
-            environment_class=None,
+            environment_class = None,
             phi_transform: callable = None,
             state_space_boundaries : list = None,
             agent_class: LearningAgent = None,
@@ -182,7 +182,7 @@ class Metrics:
     # Profit and Loss function
     @staticmethod
     def PnL(phi_a, phi_b, inv, market_spread):
-        phi_a + phi_b + inv*market_spread
+        return phi_a + phi_b + inv*market_spread
             
     # cumulative MAP
     @staticmethod

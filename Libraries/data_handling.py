@@ -24,11 +24,11 @@ class DataGenerator:
         # Crea un nuovo DataFrame con le colonne riorganizzate
         LOB = pd.DataFrame(data)
 
-        LOB['Mid Price'] = (LOB['Ask Price 1'] + LOB['Bid Price 1']) / 2
-        LOB['Market Spread'] = LOB['Ask Price 1'] - LOB['Bid Price 1']
-        LOB['Mid Price Movement'] = LOB['Mid Price'].rolling(2).apply(lambda x: x.iloc[1] - x.iloc[0]).fillna(0)
-        LOB['Book Imbalance'] = (LOB['Bid Volume 1'] - LOB['Ask Volume 1']) / (LOB['Bid Volume 1'] + LOB['Ask Volume 1'])
-        LOB['Signed Volume'] = LOB['Bid Volume 1'] - LOB['Ask Volume 1']
+        LOB.insert(0, 'Mid Price', (LOB['Ask Price 1'] + LOB['Bid Price 1']) / 2)
+        LOB.insert(1, 'Market Spread', LOB['Ask Price 1'] - LOB['Bid Price 1'])
+        LOB.insert(2, 'Mid Price Movement', LOB['Mid Price'].rolling(2).apply(lambda x: x.iloc[1] - x.iloc[0]).fillna(0))
+        LOB.insert(3, 'Book Imbalance', (LOB['Bid Volume 1'] - LOB['Ask Volume 1']) / (LOB['Bid Volume 1'] + LOB['Ask Volume 1']))
+        LOB.insert(4, 'Signed Volume', LOB['Bid Volume 1'] - LOB['Ask Volume 1'])
 
         # Issues:
 
@@ -84,7 +84,7 @@ class DataGenerator:
 
 
 if __name__ == '__main__':
-    datagen = DataGenerator('data/lob.csv', levels=1, horizon=5)
+    datagen = DataGenerator('data/GOOG.parquet', levels=1, horizon=5)
     i=0
     for window in datagen:
         print(window.shape)

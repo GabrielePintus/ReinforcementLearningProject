@@ -68,7 +68,7 @@ class MarketMakerEnv(gym.Env):
         # 4. Signed volume
         # 5. Volatility
         # 6. Relative Strength Index (RSI)
-        self.observation_space = np.zeros(6)
+        self.observation_space = np.zeros(lob_data.shape[1])
         
         # Action space
         # There are a total of 9 possible actions (buy, sell) that the agent can take
@@ -166,7 +166,7 @@ class MarketMakerEnv(gym.Env):
         psi_b = matched_b * d_b
         
         # Compute phi
-        phi = self.agent_state[0] * self.observation_space[6]
+        phi = self.agent_state[0] * self.observation_space[2]
         phi = self.phi_transform(phi)
         
         # Compute the total reward
@@ -175,9 +175,6 @@ class MarketMakerEnv(gym.Env):
         return Psi, psi_a, psi_b, phi
     
     def clear_inventory(self):
-        """
-            Clear the inventory at the end of the episode
-        """
         return self.agent_state[0] * self.observation_space[0]
     
 
@@ -204,11 +201,11 @@ class MarketMakerEnv(gym.Env):
             self.agent_state[3] = theta_b
             # Place orders in the market
             # First compute the half spread
-            spread = self.observation_space[5] / 2
+            spread = self.observation_space[1] / 2
             self.agent_state[1] = spread
             # Compute the bid and ask prices along with the volume
-            p_a = self.p(self.observation_space[4], -theta_a, spread)
-            p_b = self.p(self.observation_space[4], theta_b, spread)
+            p_a = self.p(self.observation_space[0], -theta_a, spread)
+            p_b = self.p(self.observation_space[0], theta_b, spread)
             v_a = self.v_a.sample()[0]
             v_b = self.v_b.sample()[0]
             if self.agent_state[0] >= MarketMakerEnv.MAX_INVENTORY_SIZE:
@@ -247,8 +244,8 @@ class MarketMakerEnv(gym.Env):
             'psi_b': psi_b,
             'phi': phi,
             'time': self.t,
-            'mid_price_movement': self.observation_space[6],
-            'PnL' : Metrics.PnL(psi_a,psi_b, self.agent_state[0], self.observation_space[6]), # Standard PnL
+            'mid_price_movement': self.observation_space[2],
+            'PnL' : Metrics.PnL(psi_a,psi_b, self.agent_state[0], self.observation_space[2]), # Standard PnL
             'MAP' : self.MAP,
         }
         # Non andiamo mai avanti nel LOB senza questo?
