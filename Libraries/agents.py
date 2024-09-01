@@ -103,94 +103,41 @@ class LearningUpdates:
 
     # Q-Learning Update Rule
     @staticmethod
-    def q_learning_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma):
-        q_values = value_function.get_q_values(state)
-        next_q_values = value_function.get_q_values(next_state)
+    def q_learning_update(states, action, reward, next_states, next_action, done, value_function, alpha, gamma):
+        actions = list(range(10))
+        q_values =  value_function.get_q_values(states, actions)
+        next_q_values = value_function.get_q_values(next_states, actions)
         
         best_next_action = np.argmax(next_q_values)
+
         td_target = reward + (gamma * next_q_values[best_next_action] if not done else reward)
         td_error = td_target - q_values[action]
+
+        state_tuple = tuple(state for state in states)
+        state_couple = [ np.array(list(state)) for state in state_tuple]
+        state_couple = [ np.append(state, action) for state in state_couple]
         
-        value_function.update(state, action,  alpha * td_error)
+        value_function.update(state_couple, target = alpha * td_error, alpha=alpha)
 
 
     # SARSA Update Rule
     @staticmethod
-    def sarsa_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma):
-        q_values = value_function.get_q_values(state)
-        next_q_values = value_function.get_q_values(next_state)
+    def sarsa_update(states, action, reward, next_states, next_action, done, value_function, alpha, gamma):
+        actions = list(range(10))
+        q_values =  value_function.get_q_values(states, actions)
+        next_q_values = value_function.get_q_values(next_states, actions)
         
         td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
         td_error = td_target - q_values[action]
         
-        value_function.update(state, action, alpha * td_error)
-
-    # Expected SARSA Update Rule
-    @staticmethod
-    def expected_sarsa_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, epsilon = 0.8):
-        q_values = value_function.get_q_values(state)
-        next_q_values = value_function.get_q_values(next_state)
-        
-        
-        action_probabilities = np.ones_like(next_q_values) * (epsilon / len(next_q_values))
-        best_action = np.argmax(next_q_values)
-        action_probabilities[best_action] += 1 - epsilon
-
-        expected_next_q = np.dot(next_q_values, action_probabilities)
-        
-        td_target = reward + (gamma * expected_next_q if not done else reward)
-        td_error =  td_target - q_values[action]
-        
-        value_function.update(state, action, alpha * td_error)
+        state_tuple = tuple(state for state in states)
+        state_couple = [ np.array(list(state)) for state in state_tuple]
+        state_couple = [ np.append(state, action) for state in state_couple]
 
 
-    # TD(n) Update Rule (for simplicity, we use n=1 for TD(1), which is similar to SARSA)
-    @staticmethod
-    def td_n_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, n=1, trajectory=None):
-        """
-        TD(n) update for n-step returns.
-        
-        :param state: Current state
-        :param action: Current action
-        :param reward: Immediate reward received
-        :param next_state: Next state after taking the action
-        :param next_action: Next action (not used in TD(n), but kept for compatibility)
-        :param done: Whether the episode has ended
-        :param value_function: The value function (approximator) to update Q-values
-        :param alpha: Learning rate
-        :param gamma: Discount factor
-        :param n: Number of steps to consider in TD(n)
-        :param trajectory: A deque storing the trajectory of (state, action, reward)
-        """
-        if trajectory is None:
-            trajectory = deque(maxlen=n)
+        value_function.update(state_couple, target = alpha * td_error, alpha=alpha)
 
-        # Store the current (state, action, reward) in the trajectory
-        trajectory.append((state, action, reward))
-        
-        # If we have enough elements in the trajectory, calculate the n-step return
-        if len(trajectory) == n or done:
-            # Calculate the n-step return (or truncated return if done)
-            n_step_return = sum([gamma**i * traj[2] for i, traj in enumerate(trajectory)])  # Sum of discounted rewards
-            
-            if not done:
-                next_q_values = value_function.get_q_values(next_state)
-                n_step_return += gamma**n * np.max(next_q_values)  # Add the estimated value of the next state
 
-            # Get the first (state, action) in the trajectory (i.e., the state-action pair to update)
-            first_state, first_action, _ = trajectory[0]
-
-            # Get Q-values for the first state
-            q_values = value_function.get_q_values(first_state)
-            td_error = n_step_return - q_values[first_action]
-            
-            # Update the value function for the first state-action pair
-            value_function.update(first_state, first_action, alpha * td_error)
-
-            # Remove the first element from the trajectory to move forward
-            trajectory.popleft()
-
-        return trajectory  # Return the updated trajectory
     
     #Q-Learning(λ) Update Rule
     @staticmethod
@@ -271,26 +218,11 @@ class LearningUpdates:
 
 
 
-class QLearningAgent(LearningAgent):
-    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
-        super().__init__(env, value_function, LearningUpdates.q_learning_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
-        
-class TDNAgent(LearningAgent):
-    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, n=1):
-        super().__init__(env, value_function, LearningUpdates.td_n_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
-        self.n = n
-        
-class SarsaAgent(LearningAgent):
-    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
-        super().__init__(env, value_function, LearningUpdates.sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
+# Basic agent using SARSA update rule, can be changed to Q-learning by changing the update rule to LearningUpdates.q_learning_update
 
-
-### ISSUE: non riusciamo a passare ad ESA il parametro epsilon definito in LearningAgent, come si fa? Per adesso glielo passiamo direttamente in expected sarsa update
-class ExpectedSarsaAgent(LearningAgent):
-    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
-        super().__init__(env, value_function, LearningUpdates.expected_sarsa_update, policies.epsilon_greedy_policy, alpha, gamma, epsilon, epsilon_decay, epsilon_min)
-        # self.epsilon = epsilon
-    
+class BasicAgent(LearningAgent):
+    def __init__(self, env, value_function, alpha=0.1, gamma=0.99, policy = None):
+        super().__init__(env, value_function, LearningUpdates.sarsa_update, policy, alpha, gamma)
 
 class SarsaLambdaAgent(LearningAgent):
     def __init__(self, env, value_function, alpha=0.1, gamma=0.99, policy=None, el_decay=0.8):
