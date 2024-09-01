@@ -113,15 +113,15 @@ class MarketMakerEnv(gym.Env):
 
         # Check if i can buy from someone in the market
         for price, volume in self.ask_book.items():
-            if price <= market_book[2]:
-                v = min(volume, market_book[3])
+            if price <= market_book[7]:
+                v = min(volume, market_book[8])
                 matched_a += v
                 self.ask_book[price] -= v
                 self.total_orders_executed += 1
         # Check if i can sell to someone in the market
         for price, volume in self.bid_book.items():
-            if price >= market_book[0]:
-                v = min(volume, market_book[1])
+            if price >= market_book[5]:
+                v = min(volume, market_book[6])
                 matched_b += v
                 self.bid_book[price] -= v
                 self.total_orders_executed += 1

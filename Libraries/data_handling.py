@@ -85,12 +85,7 @@ class DataGenerator:
 
 if __name__ == '__main__':
     datagen = DataGenerator('data/GOOG.parquet', levels=1, horizon=5)
-    i=0
-    for window in datagen:
-        print(window.shape)
-        if i == 10:
-            break
-        i += 1
+    print(datagen.data)
 
 
     
