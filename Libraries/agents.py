@@ -112,9 +112,7 @@ class LearningUpdates:
         td_target = reward + (gamma * next_q_values[best_next_action] if not done else reward)
         td_error = td_target - q_values[action]
 
-        state_tuple = tuple(state for state in states)
-        state_couple = [ np.array(list(state)) for state in state_tuple]
-        state_couple = [ np.append(state, action) for state in state_couple]
+        state_couple = [ np.append(state, action) for state in states ]
         
         value_function.update(state_couple, target = alpha * td_error, alpha=alpha)
 
@@ -129,10 +127,7 @@ class LearningUpdates:
         td_target = reward + (gamma * next_q_values[next_action] if not done else reward)
         td_error = td_target - q_values[action]
         
-        state_tuple = tuple(state for state in states)
-        state_couple = [ np.array(list(state)) for state in state_tuple]
-        state_couple = [ np.append(state, action) for state in state_couple]
-
+        state_couple = [ np.append(state, action) for state in states ]
 
         value_function.update(state_couple, target = alpha * td_error, alpha=alpha)
 

@@ -239,7 +239,6 @@ class MarketMakerEnv(gym.Env):
             'total_orders_executed': self.total_orders_executed,
             'inventory': self.agent_state[0],
             'reward': reward,
-            'PnL' : psi_a + psi_b + phi,
             'psi_a': psi_a,
             'psi_b': psi_b,
             'phi': phi,
@@ -247,6 +246,7 @@ class MarketMakerEnv(gym.Env):
             'mid_price_movement': self.observation_space[2],
             'PnL' : Metrics.PnL(psi_a,psi_b, self.agent_state[0], self.observation_space[2]), # Standard PnL
             'MAP' : self.MAP,
+            'market_spread' : self.observation_space[1],
         }
         # Non andiamo mai avanti nel LOB senza questo?
         self.observation_space = self.market_book_data[self.t,:]
