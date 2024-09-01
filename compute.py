@@ -13,7 +13,7 @@ levels = [1, 5, 10]
 rewards = ['PnL', 'PnL_damp', 'PnL_asymm_damp']
 
 # Agents
-agents = ['SarsaLambda', 'QLambda']
+agents = ['SarsaLambda', 'QLambda', 'BasicAgent']
 
 # Create the grid
 from itertools import product
