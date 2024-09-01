@@ -1,27 +1,13 @@
 from typing import Any
-from Libraries.environment import PhiTransform, MarketMakerEnv
 from Libraries.data_handling import DataGenerator
 from Libraries.agents import LearningAgent
 from Libraries.tiling import TileEncodingApproximator, LCTC_ValueFunction
 from Libraries.policies import Policy
 
-import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
-from tabulate import tabulate
 
 
-def train_agent(
-        agent : LearningAgent = None,
-        n_episodes : int = 10
-    ):
-    # Check the input arguments
-    assert agent is not None
-    assert n_episodes > 0
-
-    # Train the agent
-    train_rewards, infos = agent.train(n_episodes)
-    df_infos = pd.DataFrame(infos)
 
 
 class RLProblem:
@@ -33,8 +19,9 @@ class RLProblem:
     def __init__(
             self,
             data_path: str = None,
+            levels: int = 1,
             horizon: int = 100,
-            environment_class: MarketMakerEnv = None,
+            environment_class=None,
             phi_transform: callable = None,
             state_space_boundaries : list = None,
             agent_class: LearningAgent = None,
@@ -47,6 +34,7 @@ class RLProblem:
         ):
         # Store the input arguments
         self.data_path = data_path
+        self.levels = levels
         self.horizon = horizon
         self.environment_class = environment_class
         self.phi_transform = phi_transform
@@ -63,7 +51,7 @@ class RLProblem:
         # Create data generator
         self.data_generator = DataGenerator(
             self.data_path,
-            levels = 1,
+            levels = self.levels,
             horizon = self.horizon+1,
             sequential = False
         )
@@ -124,6 +112,7 @@ class RLProblem:
         n_iterations = n_scenarios * episodes_per_scenario
         iterator = range(n_iterations)
         if verbose:
+            # progress bar
             iterator = tqdm(iterator)
 
         # Train the agent
@@ -142,6 +131,12 @@ class RLProblem:
             # Store the rewards and infos
             train_rewards[idx] = train_rewards.get(idx, []) + [_rewards]
             infos[idx] = infos.get(idx, []) + [_infos]
+
+            if verbose:
+                iterator.set_postfix({
+                    'Episode': i//n_scenarios,
+                    'Epsilon': self.agent.policy.epsilon,
+                })
 
         # convert rewards structure
         train_rewards = {k: np.vstack(v).reshape(episodes_per_scenario,iterarations_per_episode) for k, v in train_rewards.items()}
@@ -182,7 +177,20 @@ class RLProblem:
             
 
 
-        
+class Metrics:
+
+    # Profit and Loss function
+    @staticmethod
+    def PnL(phi_a, phi_b, inv, market_spread):
+        phi_a + phi_b + inv*market_spread
+            
+    # cumulative MAP
+    @staticmethod
+    def MAP(inv, prev_MAP, t):
+        if(t == 1):
+            return np.abs(inv)
+        else:
+            return (np.abs(inv) + prev_MAP*(t-1))/t
 
     
     

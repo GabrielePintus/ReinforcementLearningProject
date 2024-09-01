@@ -1,4 +1,3 @@
-from typing import Any
 import pandas as pd
 import random
 
@@ -13,7 +12,7 @@ class DataGenerator:
     """
     @staticmethod
     def _generator(filename, levels = 1): # CHANGE LEVELS TO 5 QUANDO USEREMO IL FILE "VERO"
-        df = pd.read_csv(filename)
+        df = pd.read_parquet(filename)
 
         data = {}
         for level in range(1, levels + 1):

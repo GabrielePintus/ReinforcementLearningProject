@@ -135,9 +135,8 @@ class SparseTileEncodingApproximator(TileEncodingApproximator):
     def evaluate(self, state):
         encoded_tiles = self.encode(state)
         approximation = 0
-        for i in range(self.n_tilings):
-            index = self._hash_indices(encoded_tiles[i], i)
-            approximation += self.weights[index]
+        indexes = self._hash_indices(encoded_tiles, np.arange(self.n_tilings))
+        approximation = np.sum(self.weights[indexes])
         return approximation
     
     def update(self, state, target, alpha):
@@ -145,16 +144,17 @@ class SparseTileEncodingApproximator(TileEncodingApproximator):
         prediction = self.evaluate(state)
         error = target - prediction
         
-        for i in range(self.n_tilings):
-            index = self._hash_indices(encoded_tiles[i], i)
-            self.weights[index] += alpha * error
+        indexes = self._hash_indices(encoded_tiles, np.arange(self.n_tilings))
+        indexes = np.array(indexes)
+        alpha_error = alpha * error
+        self.weights[indexes] += alpha_error
     
     def _hash_indices(self, tile_indices, tiling_index):
         """
         Hash the tile indices and tiling index into a single index for the weight vector.
         This uses a simple hash function, but can be made more sophisticated if needed.
         """
-        return int((np.sum(tile_indices) + tiling_index) % self.n_weights)
+        return ((np.sum(tile_indices) + tiling_index) % self.n_weights).astype(int)
 
     def get_q_values(self, state, actions):
         q_values = dict()

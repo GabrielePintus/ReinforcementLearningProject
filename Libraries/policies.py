@@ -24,8 +24,6 @@ class Policy:
 
 
 
-
-
 class EpsilonGreedyPolicy(Policy):
     
         def __init__(
@@ -52,6 +50,8 @@ class EpsilonGreedyPolicy(Policy):
         def update(self):
             if self.epsilon > self.epsilon_min:
                 self.epsilon *= self.epsilon_decay
+            else:
+                self.epsilon = self.epsilon_min
 
 
 def epsilon_greedy_policy(state, value_function, env, epsilon):

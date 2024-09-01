@@ -1,9 +1,7 @@
 import gym
 import gym.spaces
 import numpy as np
-from numpy import inf
-from numpy.core.multiarray import array as array
-
+from Libraries.utils import Metrics
 
 
 class PhiTransform:
@@ -100,6 +98,9 @@ class MarketMakerEnv(gym.Env):
         # State space dimension
         self.states_dim = [len(s) for s in self.get_state()]
         self.state_dim = sum(self.states_dim)
+
+        # Mean Absolute Position (MAP)
+        self.MAP = 0
     
     # Given the current open position, check if some of the orders can be matched and execute them
     def match(self):
@@ -149,6 +150,7 @@ class MarketMakerEnv(gym.Env):
         self.bid_book = dict()
         self.total_orders_placed = 0
         self.total_orders_executed = 0
+        self.MAP = 0
         
         return self.get_state()
     
@@ -224,6 +226,9 @@ class MarketMakerEnv(gym.Env):
         # Update the inventory
         self.agent_state[0] += matched_a - matched_b
 
+        # Update the Mean Absolute Position (MAP)
+        self.MAP = Metrics.MAP(self.agent_state[0], self.MAP, self.t)
+
 
     def get_state(self):
         return [self.observation_space]
@@ -241,6 +246,10 @@ class MarketMakerEnv(gym.Env):
             'psi_a': psi_a,
             'psi_b': psi_b,
             'phi': phi,
+            'time': self.t,
+            'mid_price_movement': self.observation_space[6],
+            'PnL' : Metrics.PnL(psi_a,psi_b, self.agent_state[0], self.observation_space[6]), # Standard PnL
+            'MAP' : self.MAP,
         }
         # Non andiamo mai avanti nel LOB senza questo?
         self.observation_space = self.market_book_data[self.t,:]

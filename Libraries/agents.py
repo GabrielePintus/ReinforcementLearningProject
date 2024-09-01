@@ -1,8 +1,6 @@
 import numpy as np
-from tqdm.auto import tqdm
 from Libraries import policies
 from collections import deque
-
 
 
 class LearningAgent:
