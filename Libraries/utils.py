@@ -187,7 +187,7 @@ class Metrics:
     # cumulative MAP
     @staticmethod
     def MAP(inv, prev_MAP, t):
-        if(t == 1):
+        if(t == 0):
             return np.abs(inv)
         else:
             return (np.abs(inv) + prev_MAP*(t-1))/t

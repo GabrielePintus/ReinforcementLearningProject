@@ -53,26 +53,27 @@ class MarketMakerEnv(gym.Env):
         # Environment state = agent_state + observation_space
         
         # Agent state = (inventory, spread, theta_a, theta_b)
-        # 1. Inventory - the amount of stock currently owned or owed by the agent
-        # 2. Spread - the current value of the spread scale factor
-        # 3. Active quoting distances normalized by the current spread
+        # 0. Inventory - the amount of stock currently owned or owed by the agent
+        # 1. Spread - the current value of the spread scale factor
+        # 2,3. Active quoting distances normalized by the current spread
         #    there are the effective values of the control parameters theta_a and theta_b
         #    after stepping forward in the simulation
         self.agent_state = np.zeros(4)
         
         # Market state = (ba_spread, mid_move, book_imbalance, signed_volume, volatility, rsi)
         # 0. Mid price
-        # 1. Bid-Ask spread
-        # 2. Mid price move
+        # 1. Market Spread = Bid-Ask spread
+        # 2. Mid price Movement
         # 3. Book imbalance
         # 4. Signed volume
-        # 5. Volatility
-        # 6. Relative Strength Index (RSI)
+        # 5. RSI
+        # 6. Returns
+        # 7. Volatility
         self.observation_space = np.zeros(lob_data.shape[1])
         
-        # Action space
-        # There are a total of 9 possible actions (buy, sell) that the agent can take
-        # 1 = (1,1), ..., 5 = (5,5), 6 = (1,3), 7 = (3,1), 8 = (2,5), 9 = (5,2)
+        # # Action space
+        # # There are a total of 9 possible actions (buy, sell) that the agent can take
+        # # 1 = (1,1), ..., 5 = (5,5), 6 = (1,3), 7 = (3,1), 8 = (2,5), 9 = (5,2)
         self.action_space = gym.spaces.Discrete(10)
         
         
@@ -88,7 +89,6 @@ class MarketMakerEnv(gym.Env):
         self.p_b = 0
         self.v_a = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
         self.v_b = gym.spaces.Box(low=0, high=self.MAX_ORDER_SIZE, shape=(1,), dtype=np.int32)
-        self.market_order_size = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.phi_transform = phi_transform
 
         # Variables for additional information
@@ -109,34 +109,31 @@ class MarketMakerEnv(gym.Env):
         # Additionally, save the amount of volume matched
         matched_a = 0
         matched_b = 0
-        market_book = self.market_book_data[self.t,:]
-
         # Check if i can buy from someone in the market
-        for price, volume in self.ask_book.items():
-            if price <= market_book[7]:
-                v = min(volume, market_book[8])
-                matched_a += v
-                self.ask_book[price] -= v
-                self.total_orders_executed += 1
-        # Check if i can sell to someone in the market
         for price, volume in self.bid_book.items():
-            if price >= market_book[5]:
-                v = min(volume, market_book[6])
+            if price >= self.observation_space[8]:
+                v = min(volume, self.observation_space[9])
                 matched_b += v
                 self.bid_book[price] -= v
                 self.total_orders_executed += 1
-                
+        # Check if i can sell to someone in the market
+        for price, volume in self.ask_book.items():
+            if price <= self.observation_space[10]:
+                v = min(volume, self.observation_space[11])
+                matched_a += v
+                self.ask_book[price] -= v
+                self.total_orders_executed += 1
 
         return matched_a, matched_b
         
     def place_order(self, price, volume, side):
+        price = round(price, 2)
         if side == 'ask':
             self.ask_book[price] = self.ask_book.get(price, 0) + volume
             self.best_ask = min(self.ask_book.keys())
         elif side == 'bid':
             self.bid_book[price] = self.bid_book.get(price, 0) + volume
             self.best_bid = max(self.bid_book.keys())
-        
         # Update the total number of orders placed
         self.total_orders_placed += 1
     
@@ -144,7 +141,7 @@ class MarketMakerEnv(gym.Env):
     def reset(self):
         self.t = 0
         self.agent_state = np.zeros_like(self.agent_state)
-        self.observation_space = np.zeros_like(self.observation_space)
+        # self.observation_space = np.zeros_like(self.observation_space)
         self.observation_space = self.market_book_data[self.t,:]
         self.ask_book = dict()
         self.bid_book = dict()
@@ -154,14 +151,13 @@ class MarketMakerEnv(gym.Env):
         
         return self.get_state()
     
-    def reward(self):
+    def reward(self, matched_a, matched_b):
         """
             Simple Profit and Loss (PnL) reward function
-        """        
+        """
         # Compute psi_a and psi_b
-        d_a = self.agent_state[2] * self.agent_state[1]
-        d_b = -1 * self.agent_state[3] * self.agent_state[1]
-        matched_a, matched_b = self.match()
+        d_a = self.agent_state[2] * self.observation_space[1]/2
+        d_b = -1 * self.agent_state[3] * self.observation_space[1]/2
         psi_a = matched_a * d_a
         psi_b = matched_b * d_b
         
@@ -175,7 +171,14 @@ class MarketMakerEnv(gym.Env):
         return Psi, psi_a, psi_b, phi
     
     def clear_inventory(self):
-        return self.agent_state[0] * self.observation_space[0]
+        # return self.agent_state[0] * self.observation_space[0]
+        # If the inventory is positive, sell all the stock
+        if self.agent_state[0] > 0:
+            self.place_order(self.best_bid, self.agent_state[0], 'ask')
+        # If the inventory is negative, buy all the stock
+        elif self.agent_state[0] < 0:
+            self.place_order(self.best_ask, -self.agent_state[0], 'bid')
+        
     
 
     def transition(self, action):
@@ -187,31 +190,16 @@ class MarketMakerEnv(gym.Env):
         theta_a, theta_b = self.ACTIONS_0_8[action]
         if theta_a < 0 and theta_b < 0:
             # clear inventory 
-            total_ask = sum(self.ask_book.values())
-            total_bid = sum(self.bid_book.values())
-            balance_volume = total_ask - total_bid
-            # market_order_size = self.market_order_size.sample()[0] * balance_volume
-            market_order_size = 1 * balance_volume
-            if balance_volume > 0:
-                self.place_order(self.best_bid, market_order_size, 'bid')
-            elif balance_volume < 0:
-                self.place_order(self.best_ask, -market_order_size, 'ask')
+            self.clear_inventory()
         else:
             self.agent_state[2] = theta_a
             self.agent_state[3] = theta_b
             # Place orders in the market
-            # First compute the half spread
-            spread = self.observation_space[1] / 2
-            self.agent_state[1] = spread
             # Compute the bid and ask prices along with the volume
-            p_a = self.p(self.observation_space[0], -theta_a, spread)
-            p_b = self.p(self.observation_space[0], theta_b, spread)
-            v_a = self.v_a.sample()[0]
-            v_b = self.v_b.sample()[0]
-            if self.agent_state[0] >= MarketMakerEnv.MAX_INVENTORY_SIZE:
-                v_a = 0
-            if self.agent_state[0] <= -MarketMakerEnv.MAX_INVENTORY_SIZE:
-                v_b = 0
+            p_a = self.p(self.observation_space[0], theta_a, self.observation_space[1] / 2)
+            p_b = self.p(self.observation_space[0], -theta_b, self.observation_space[1] / 2)
+            v_a = self.v_a.sample()[0] if self.agent_state[0] > -MarketMakerEnv.MAX_INVENTORY_SIZE else 0
+            v_b = self.v_b.sample()[0] if self.agent_state[0] < MarketMakerEnv.MAX_INVENTORY_SIZE else 0
             # Update the bid and ask books
             self.place_order(p_a, v_a, 'ask')
             self.place_order(p_b, v_b, 'bid')
@@ -219,20 +207,24 @@ class MarketMakerEnv(gym.Env):
         # Execute the orders
         # Update the time
         self.t += 1
+        self.observation_space = self.market_book_data[self.t,:]
+        # Check if some of the orders can be matched
         matched_a, matched_b = self.match()
+        
         # Update the inventory
-        self.agent_state[0] += matched_a - matched_b
+        self.agent_state[0] += matched_b - matched_a
 
         # Update the Mean Absolute Position (MAP)
         self.MAP = Metrics.MAP(self.agent_state[0], self.MAP, self.t)
 
+        return matched_a, matched_b, (self.get_state(), action)
 
     def get_state(self):
         return [self.observation_space]
 
     def step(self, action):
-        self.transition(action)
-        reward, psi_a, psi_b, phi = self.reward()
+        matched_a, matched_b, Q = self.transition(action)
+        reward, psi_a, psi_b, phi = self.reward(matched_a, matched_b)
         done = self.t >= self.horizon
         info = {
             'total_orders_placed': self.total_orders_placed,
@@ -247,9 +239,8 @@ class MarketMakerEnv(gym.Env):
             'PnL' : Metrics.PnL(psi_a,psi_b, self.agent_state[0], self.observation_space[2]), # Standard PnL
             'MAP' : self.MAP,
             'market_spread' : self.observation_space[1],
+            'Q' : Q
         }
-        # Non andiamo mai avanti nel LOB senza questo?
-        self.observation_space = self.market_book_data[self.t,:]
         return self.get_state(), reward, done, info
 
 

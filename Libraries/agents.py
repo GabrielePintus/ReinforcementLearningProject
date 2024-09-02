@@ -1,4 +1,6 @@
 import numpy as np
+import concurrent.futures
+
 # from Libraries import policies
 # from collections import deque
 
@@ -135,7 +137,7 @@ class LearningUpdates:
     
     #Q-Learning(λ) Update Rule
     @staticmethod
-    def q_lambda_update(states, action, reward, next_states, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace, forget_threshold=1e-6):
+    def q_lambda_update(states, action, reward, next_states, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace, forget_threshold=1e-3):
         actions = list(range(10))
         q_values = value_function.get_q_values(states, actions)
         next_q_values = value_function.get_q_values(next_states, actions)
@@ -170,9 +172,10 @@ class LearningUpdates:
 
         return eligibility_trace
     
+    
     #Sarsa(λ) Update Rule
     @staticmethod
-    def sarsa_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace, forget_threshold=1e-6):
+    def sarsa_lambda_update(state, action, reward, next_state, next_action, done, value_function, alpha, gamma, el_decay, eligibility_trace, forget_threshold=1e-3):
         actions = list(range(10))
         q_values = value_function.get_q_values(state, actions)
         next_q_values = value_function.get_q_values(next_state, actions)
@@ -208,6 +211,7 @@ class LearningUpdates:
             del eligibility_trace[key]
 
         return eligibility_trace
+
 
 
 

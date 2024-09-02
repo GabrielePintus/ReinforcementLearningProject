@@ -15,11 +15,11 @@ class DataGenerator:
         df = pd.read_parquet(filename)
 
         data = {}
-        for level in range(1, levels + 1):
-            data[f'Ask Price {level}'] = df.iloc[:, (level - 1) * 4] / 1e4       # QULACUNO NEL MERCATO VUOLE COMPRARE A TOT
-            data[f'Ask Volume {level}'] = df.iloc[:, (level - 1) * 4 + 1]   # QUALCUNO NEL MERCATO VUOLE COMPRARE TOT QUANTITA'
-            data[f'Bid Price {level}'] = df.iloc[:, (level - 1) * 4 + 2] / 1e4   # QUALCUNO NEL MERCATO VUOLE VENDERE A TOT
-            data[f'Bid Volume {level}'] = df.iloc[:, (level - 1) * 4 + 3]  # QUALCUNO NEL MERCATO VUOLE VENDERE TOT QUANTITA'
+        for level in range(levels):
+            data[f'Ask Price {level+1}']  = df.iloc[:, level * 4] #e4       # QULACUNO NEL MERCATO VUOLE COMPRARE A TOT
+            data[f'Ask Volume {level+1}'] = df.iloc[:, level * 4 + 1]   # QUALCUNO NEL MERCATO VUOLE COMPRARE TOT QUANTITA'
+            data[f'Bid Price {level+1}']  = df.iloc[:, level * 4 + 2] #e4   # QUALCUNO NEL MERCATO VUOLE VENDERE A TOT
+            data[f'Bid Volume {level+1}'] = df.iloc[:, level * 4 + 3]  # QUALCUNO NEL MERCATO VUOLE VENDERE TOT QUANTITA'
         
         # Crea un nuovo DataFrame con le colonne riorganizzate
         LOB = pd.DataFrame(data)
@@ -30,19 +30,18 @@ class DataGenerator:
         LOB.insert(3, 'Book Imbalance', (LOB['Bid Volume 1'] - LOB['Ask Volume 1']) / (LOB['Bid Volume 1'] + LOB['Ask Volume 1']))
         LOB.insert(4, 'Signed Volume', LOB['Bid Volume 1'] - LOB['Ask Volume 1'])
 
-        # Issues:
-
-        # Returns = (Price at time t - Price at time t-1) / Price at time t-1
-        LOB['Returns'] = LOB['Mid Price'].pct_change()
-
-        # Volatility è la std dei returns, che non abbiamo, su 10 periodi. Quindi usiamo come proxy il moving mid price?
-        LOB['Volatility'] = LOB['Returns'].rolling(window=10).std()
-
+        # RSI
         delta = LOB['Mid Price'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
-        LOB['RSI'] = 100 - (100 / (1 + rs))
+        LOB.insert(5, 'RSI',  100 - (100 / (1 + rs)))
+
+        # Returns = (Price at time t - Price at time t-1) / Price at time t-1
+        LOB.insert(6, 'Returns', LOB['Mid Price'].pct_change().fillna(0))
+
+        # Volatility è la std dei returns, che non abbiamo, su 10 periodi. Quindi usiamo come proxy il moving mid price?
+        LOB.insert(7, 'Volatility', LOB['Mid Price'].rolling(10).std())
 
         # RSI ha bisogno di gain e loss, che non abbiamo. Qui ho usato come gain e loss le variazioni positive e negative del mid price a mo' di proxy. Va bene?
         # RSI=100 − 100/(1+ RS)
