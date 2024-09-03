@@ -204,14 +204,14 @@ class LCTC_ValueFunction:
 
 
 if __name__ == '__main__':
-    import psutil
-    import os
+    # import psutil
+    # import os
     
-    def memory_usage():
-        process = psutil.Process(os.getpid())
-        mem_info = process.memory_info()
-        megabytes = mem_info.rss / 1024 / 1024
-        return megabytes
+    # def memory_usage():
+    #     process = psutil.Process(os.getpid())
+    #     mem_info = process.memory_info()
+    #     megabytes = mem_info.rss / 1024 / 1024
+    #     return megabytes
     
     
     
@@ -228,8 +228,8 @@ if __name__ == '__main__':
     state_couple_2 = np.concatenate((state_2, [2]))
     target_value = 2.3
 
-    value_function_1 = SparseTileEncodingApproximator(state_couple_1.size, bounds_1, n_tiles, n_tilings, offset, 100)
-    value_function_2 = SparseTileEncodingApproximator(state_couple_2.size, bounds_2, n_tiles, n_tilings, offset, 100)
+    value_function_1 = SparseTileEncodingApproximator(state_couple_1.size, bounds_1, n_tiles, n_tilings, offset, 10000)
+    value_function_2 = SparseTileEncodingApproximator(state_couple_2.size, bounds_2, n_tiles, n_tilings, offset, 10000)
 
     # Value function 1,2 evaluation
     evaluation = value_function_1.evaluate(state_couple_1)
@@ -241,7 +241,7 @@ if __name__ == '__main__':
     lctc_weights = np.array([0.5, 0.5])
     value_function = LCTC_ValueFunction(value_functions, lctc_weights)
 
-    print('Memory usage: {:.2f} MB'.format(memory_usage()))
+    # print('Memory usage: {:.2f} MB'.format(memory_usage()))
 
     evaluation = value_function.evaluate([state_couple_1, state_couple_2])
     print('Initial evaluation:', evaluation)
