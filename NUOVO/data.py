@@ -10,7 +10,7 @@ class DataGenerator:
         levels (int): Number of levels in the order book
     """
     @staticmethod
-    def _generator(filename, levels = 1): # CHANGE LEVELS TO 5 QUANDO USEREMO IL FILE "VERO"
+    def generator(filename, levels = 1): # CHANGE LEVELS TO 5 QUANDO USEREMO IL FILE "VERO"
         df = pd.read_parquet(filename).head(10000)
 
         data = {}
@@ -54,7 +54,7 @@ class DataGenerator:
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     
-    df = DataGenerator._generator('data/lob.csv', levels=1)
+    df = DataGenerator.generator('data/lob.csv', levels=1)
     
     # Plot mid price
     print(df.head())
