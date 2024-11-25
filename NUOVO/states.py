@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 
-# Custom modules
-from data import DataGenerator
 
 
 class PsiDampening:
@@ -38,7 +36,7 @@ class EnvironmentState:
     MAX_INVENTORY = 10000
     MIN_INVENTORY = -10000
 
-    def __init__(self, data, n_levels):
+    def __init__(self, data, n_levels, horizon):
         self.t = 0
         self.n_levels = n_levels
         self.data = data
@@ -46,10 +44,13 @@ class EnvironmentState:
         self.theta_a = None
         self.theta_b = None
         self.orders = []
+        self.alpha = 0.5
+        self.horizon = horizon
     
     def sample_order_volume(self):
-        size = 1
+        size = 100
         return size, size    
+    
     # Getters
     def get_ref_price(self):
         return self.data.iloc[self.t].values[4*self.n_levels]
@@ -57,6 +58,8 @@ class EnvironmentState:
         return self.data.iloc[self.t].values[:4*self.n_levels]
     def get_mid_price_movement(self):
         return self.data['Mid Price Movement'].iloc[self.t]
+    def get_half_spread(self):
+        return self.data['Market Spread'].iloc[self.t] / 2
     def get_market_state(self):
         return self.data.iloc[self.t].values[4*self.n_levels+1:]
     def get_agent_state(self):
@@ -67,31 +70,55 @@ class EnvironmentState:
 
     def get_state(self):
         return self.get_full_state()
+    
     def reset(self):
         self.t = 0
         self.inventory = 0
         self.theta_a = None
         self.theta_b = None
         self.orders = []
+        self.alpha = 0.5
         return self.get_state()
 
 
-    def match_orders(self, lob_t):
-        n_levels = lob_t.shape[1] // 4
-        # for i in range(len(self.orders)):
+    def clear_inventory(self):
+        v = int(self.inventory * self.alpha)
+        best_price, side = None, None
+        if v < 0:
+            # We need to buy
+            best_price = self.get_lob_t()[2]
+            side = 'bid'
+        elif v > 0:
+            # We need to sell
+            best_price = self.get_lob_t()[0]
+            side = 'ask'
+        # Add at the beginning of the list
+        if best_price is not None and side is not None:
+            self.orders.insert(0, (best_price, abs(v), side))
+            
+        
+        
+
+    def match_orders(self):
+        lob_t = self.get_lob_t()
         # Check the orders from the oldest to the newest
         transactions_ask = []
         transactions_bid = []
-        for i in range(len(self.orders) - 1, -1, -1):
+
+        print("Orders")
+        print(self.orders, end='\n\n')        
+
+        for i in range(len(self.orders)):
+            print("Order", i)
             price, volume, side = self.orders[i]
             if side == 'bid':
                 # We want to buy
-                for level in n_levels:
+                for level in range(self.n_levels):
                     # Get price and volume at this level
                     p_a_lob = lob_t[4 * level]
                     v_a_lob = lob_t[4 * level + 1]
                     if price >= p_a_lob:
-                        # We have a match
+                        # We have a match                        
                         match_price = price
                         match_volume = min(volume, v_a_lob)
                         # Track the transaction
@@ -104,16 +131,17 @@ class EnvironmentState:
                         self.orders[i] = (price, volume, side)
                         # Check if the order is completed
                         if volume == 0:
+                            print("Order completed")
                             # Remove the order
                             self.orders.pop(i)
             else:
                 # We want to sell
-                for level in n_levels:
+                for level in range(self.n_levels):
                     # Get price and volume at this level
                     p_b_lob = lob_t[4 * level + 2]
                     v_b_lob = lob_t[4 * level + 3]
                     if price <= p_b_lob:
-                        # We have a match
+                        # We have a match                        
                         match_price = price
                         match_volume = min(volume, v_b_lob)
                         # Track the transaction
@@ -126,21 +154,23 @@ class EnvironmentState:
                         self.orders[i] = (price, volume, side)
                         # Check if the order is completed
                         if volume == 0:
+                            print("Order completed")
                             # Remove the order
                             self.orders.pop(i)
         return transactions_ask, transactions_bid
     
 
-    def update(self, action, half_spread):
+    def update(self, action):
         assert action in range(len(EnvironmentState.ACTION_SPACE))
+        
         self.theta_a, self.theta_b = EnvironmentState.ACTION_SPACE[action]
         ref_price = self.get_ref_price()
-        past_inventory = self.inventory
+        half_spread = self.get_half_spread()
         
         # Do the action
         if self.theta_a < 0 and self.theta_b < 0:
-            # Clear inventory
-            pass
+            market_orders = self.clear_inventory()
+            self.orders.extend(market_orders)
         else:
             # Compute the bid and ask prices along with the volume
             p_a = ref_price + (half_spread * self.theta_a)
@@ -151,11 +181,9 @@ class EnvironmentState:
                 # Place the orders
                 self.orders.append((p_a, v_a, 'ask'))
                 self.orders.append((p_b, v_b, 'bid'))
-            else:
-                pass
         
         # Check if there are matching orders
-        transactions_ask, transactions_bid = self.match_orders(self.get_lob_t())
+        transactions_ask, transactions_bid = self.match_orders() # Inventory can change inside this function
         # Compute phi_a and phi_b
         phi_a = 0
         for price, volume in transactions_ask:
@@ -163,15 +191,17 @@ class EnvironmentState:
         phi_b = 0
         for price, volume in transactions_bid:
             phi_b += volume * (ref_price - price)
+            
+        # Update the time
+        self.t += 1
+            
         # Compute inventory portion of reward
         mid_price_change = self.get_mid_price_movement()
-        psi = mid_price_change * past_inventory
+        psi = mid_price_change * self.inventory
         # Compute psi dampening factor
         psi = PsiDampening.asymm_damp(psi, 0.5)
         # Compute the reward
         reward = phi_a + phi_b + psi
 
-        # Update the time
-        self.t += 1
 
-        return reward
+        return self.get_state(), reward, (self.t == self.horizon)

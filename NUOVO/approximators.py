@@ -16,6 +16,7 @@ class MLP(nn.Module):
         dropout=0.0,
         device=torch.device('cpu')
     ):
+        super(MLP, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
         self.hidden_sizes = hidden_sizes
@@ -47,50 +48,49 @@ class MLP(nn.Module):
 
 class QValueApproximator:
 
-    def __init__(self, model):
+    def __init__(self, model, learning_rate=0.001):
         self.model = model
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.criterion = nn.MSELoss()  # Mean Squared Error loss for regression
 
     def predict(self, state):
-        with torch.no_grad():
-            state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-            return self.model(state).numpy()
+        """
+        Predict Q-values for a given state using the model.
+
+        Parameters:
+        - state (np.ndarray): The input state to predict Q-values for.
+
+        Returns:
+        - q_values (torch.Tensor): Predicted Q-values for all actions.
+        """
+        # Convert state to tensor and move to the appropriate device
+        print(state)
+        with torch.no_grad():  # No need to track gradients for prediction
+            q_values = self.model(state.unsqueeze(0))  # Add batch dimension
+        return q_values.squeeze(0)  # Remove batch dimension
+
+    def update(self, y_true, y_pred):
+        """
+        Update the model using the provided target and predicted Q-values.
+
+        Parameters:
+        - y_true (torch.Tensor): Target Q-values.
+        - y_pred (torch.Tensor): Predicted Q-values.
+
+        Returns:
+        - loss (float): The loss value.
+        """
+        # Check if input is tensor or numpy array
+        if not torch.is_tensor(y_true):
+            y_true = torch.tensor(y_true).to(self.model.device)
+        if not torch.is_tensor(y_pred):
+            y_pred = torch.tensor(y_pred).to(self.model.device)
+            
+        print('Y_true shape', y_true.shape)
+        print('Y_pred shape', y_pred.shape)
         
-    def update(self, state, target):
-        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-        target = torch.tensor(target, dtype=torch.float32).unsqueeze(0)
-        
-        # NN Training
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-3, betas=(0.9, 0.999))
-        criterion = nn.MSELoss()
-        optimizer.zero_grad()
-        output = self.model(state)
-        loss = criterion(output, target)
+        loss = self.criterion(y_pred, y_true)
+        self.optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
-
+        self.optimizer.step()
         return loss.item()
-
-    def batch_update(self, states, targets):
-        states = torch.tensor(states, dtype=torch.float32)
-        targets = torch.tensor(targets, dtype=torch.float32)
-        
-        dataset = torch.utils.data.TensorDataset(states, targets)
-        loader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True)
-
-        # NN Training
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-3, betas=(0.9, 0.999))
-        criterion = nn.MSELoss()
-        for state, target in loader:
-            optimizer.zero_grad()
-            output = self.model(state)
-            loss = criterion(output, target)
-            loss.backward()
-            optimizer.step()
-
-        return loss.item()
-    
-    
-    
-    
-    
-        

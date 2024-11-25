@@ -1,137 +1,110 @@
 import numpy as np
-
+import random
+import torch
 
 
 class LearningAgent:
-
     def __init__(
         self,
-        env,
-        value_function,
-        update_rule,
-        policy,
-        alpha=0.1,
-        gamma=0.99,
-        el_decay=None
+        action_size, # 10 in our case
+        q_value_approximator, 
+        epsilon=0.5,
+        epsilon_decay=0.99,
+        min_epsilon=0.1,
+        gamma=0.99
     ):
         """
-        Generalized reinforcement learning agent.
+        Initialize the Learning Agent.
 
-        Args:
-            env: The environment instance (must have reset() and step() methods).
-            value_function: Value function approximator (e.g., table or neural network).
-            update_rule: Function for updating the value function (e.g., Q-learning).
-            policy: Policy object for action selection (e.g., epsilon-greedy).
-            alpha: Learning rate.
-            gamma: Discount factor.
-            el_decay: Lambda for eligibility traces (default: None, no traces).
+        Parameters:
+        - action_size (int): The size of the action space.
+        - q_value_approximator (QValueApproximator): The Q-value approximator model.
+        - epsilon (float): Initial exploration rate for epsilon-greedy strategy.
+        - epsilon_decay (float): Decay factor for exploration rate.
+        - min_epsilon (float): Minimum value for exploration rate.
+        - gamma (float): Discount factor for future rewards.
         """
-        self.env = env
-        self.update_rule = update_rule  # Generalized update rule (e.g., Q-learning, SARSA)
-        self.policy = policy  # Generalized policy (e.g., epsilon-greedy)
-        self.alpha = alpha
+        self.action_size = action_size
+        self.q_value_approximator = q_value_approximator
+        self.epsilon = epsilon
+        self.epsilon_decay = epsilon_decay
+        self.min_epsilon = min_epsilon
         self.gamma = gamma
-        self.policy = policy
-        self.el_decay = el_decay    # eligibility traces lambda decay term
-        self.eligibility_trace = None
-
-        # Initialize eligibility trace for SARSA(λ) if lambda is provided, 
-        if el_decay is not None:
-            self.reset_eligibility_trace()
-
-    def reset_eligibility_trace(self):
-        if self.el_decay is not None:
-            self.eligibility_trace = {}
+        
+    def target_policy(self, state):
+        q_values = self.q_value_approximator.predict(state).cpu().detach().numpy()
+        print('Q-values', q_values)
+        return np.argmax(q_values)  # Exploit
     
-    # Update the value function using the specified update rule
-    def learn(self, state, action, reward, next_state, next_action, done):
-        if self.el_decay is not None:
-            self.update_rule(state, action, reward, next_state, next_action, done, self.value_function, self.alpha, self.gamma, self.el_decay, self.eligibility_trace)
+    def behaviour_policy(self, state):
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.action_size)  # Explore
         else:
-            self.update_rule(state, action, reward, next_state, next_action, done, self.value_function, self.alpha, self.gamma)
+            return self.target_policy(state)  # Exploit
+    def update_epsilon(self):
+        self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
 
 
-    def train(self, n_episodes):
-        progress_bar = range(n_episodes)
+    def train(self, env, n_episodes):
         rewards = np.zeros(n_episodes)
-
-        for episode in progress_bar:
-            state = self.env.reset()
-            action = self.choose_action(state)
+        
+        for episode in range(n_episodes):
+            state = env.reset()
             done = False
             total_reward = 0
-
-            # Reset the eligibility trace if applicable
-            self.reset_eligibility_trace()
-
+            
             while not done:
-                next_state, reward, done = self.env.step(action)
-
-                # Choose next action
-                next_action = self.policy(next_state)
-
+                print('Time', env.t)
+                # Choose action based on the behaviour policy
+                if env.t > 0:
+                    action = self.behaviour_policy(state)
+                else:
+                    action = np.random.randint(self.action_size)
+                    # Update the state - update theta_a and theta_b
+                    theta_a, theta_b = env.ACTION_SPACE[action]
+                    state[-2] = theta_a
+                    state[-1] = theta_b
+                    
+                print('Action', action)
+                
+                # Take action and observe next state and reward
+                next_state, reward, done = env.update(action)
+                print('Next state', next_state)
+                
                 # Learn from the transition
-                self.learn(state, action, reward, next_state, next_action, done)
-
-                # Update the state and action
+                if not done:
+                    self.learn(state, action, reward, next_state)
+                
+                # Update the state
                 state = next_state
-                action = next_action
-                total_reward += reward
-
+                total_reward += reward if not done else 0
+                
+            # Update epsilon
+            self.update_epsilon()
+            
+            # Store the total reward
             rewards[episode] = total_reward
-            self.policy.update()
         
-        return rewards
-    
-
-
-
-
-
-
-class LearningUpdates:
-
-    @staticmethod
-    def q_learning(
-        state, action, reward, next_state, _, done, value_function, alpha, gamma, **kwargs
-    ):
-        """
-        Q-Learning update rule.
-
-        Args:
-            state: Current state.
-            action: Current action.
-            reward: Reward received.
-            next_state: Next state.
-            _: Placeholder for next_action (not used in Q-Learning).
-            done: Whether the episode is done.
-            value_function: Value function table or approximator.
-            alpha: Learning rate.
-            gamma: Discount factor.
-        """
-        # Get the current Q-value
-        q_value = value_function(state)[action]
-
-        # Compute the TD target
-        td_target = reward + gamma * np.max(value_function(next_state)) * (1 - done)
-
-        # Compute the TD error
-        td_error = td_target - q_value
-
-        # Update the Q-value
-        value_function.update(state, action, alpha * td_error)
-
-
-
-
-
-
-
-# Basic agent using SARSA update rule, can be changed to Q-learning by changing the update rule to LearningUpdates.q_learning_update
-
-class QLearningAgent(LearningAgent):
-    def __init__(self, env, value_function, policy, alpha=0.1, gamma=0.99):
-        super().__init__(env, value_function, LearningUpdates.q_learning, policy, alpha, gamma)
-
-    def reset_eligibility_trace(self):
-        pass
+    def learn(self, state, action, reward, next_state):
+        # Combine the current state and action
+        x = np.concatenate([state, [action]]).astype(np.float32)
+        print('State', x)
+        x = torch.tensor(x, dtype=torch.float32).to(self.q_value_approximator.model.device)
+        
+        # Compute y_pred
+        y_pred = self.q_value_approximator.predict(x)
+        
+        # Compute y_true
+        preds = np.zeros(self.action_size)
+        for a in range(self.action_size):
+            x_next = np.concatenate([next_state, [a]])
+            x_next = torch.tensor(x_next, dtype=torch.float32).to(self.q_value_approximator.model.device)
+            preds[a] = self.q_value_approximator.predict(x_next).item()
+        y_true = [reward + self.gamma * np.max(preds)]
+        print('Y_true', y_true)
+        
+        # Update the Q-value approximator - Returns the loss
+        _ = self.q_value_approximator.update(y_true, y_pred)
+        
+        
+       

@@ -39,6 +39,8 @@ class EpsilonGreedyPolicy:
             else:
                 self.epsilon = self.epsilon_min
 
+        def __call__(self, state):
+            return self.get_action(state)
 
 
 
