@@ -5,6 +5,18 @@ import pandas as pd
 from data import DataGenerator
 
 
+class PsiDampening:
+
+    @staticmethod
+    def symm_damp(psi, eta):
+        return psi * (1 - eta)
+
+    @staticmethod
+    def asymm_damp(psi, eta):
+        return psi - max(0, eta*psi)
+
+
+
 class EnvironmentState:
 
     # Constants
@@ -26,35 +38,42 @@ class EnvironmentState:
     MAX_INVENTORY = 10000
     MIN_INVENTORY = -10000
 
-    def __init__(self, filepath, n_levels):
+    def __init__(self, data, n_levels):
         self.t = 0
         self.n_levels = n_levels
-        self.data = DataGenerator.generator(filepath, levels=self.n_levels)
+        self.data = data
         self.inventory = 0
         self.theta_a = None
         self.theta_b = None
         self.orders = []
-
-    # Get state methods
-    def get_market_state(self):
-        return self.data.iloc[self.t].values[4*self.n_levels+1:]
-    
-    def get_agent_state(self):
-        return np.array([
-            self.inventory,
-            self.theta_a,
-            self.theta_b,
-        ])
-    
-    def get_full_state(self):
-        return np.concatenate((self.get_market_state(), self.get_agent_state()))
-
-    
     
     def sample_order_volume(self):
         size = 1
-        return size, size
+        return size, size    
+    # Getters
+    def get_ref_price(self):
+        return self.data.iloc[self.t].values[4*self.n_levels]
+    def get_lob_t(self):
+        return self.data.iloc[self.t].values[:4*self.n_levels]
+    def get_mid_price_movement(self):
+        return self.data['Mid Price Movement'].iloc[self.t]
+    def get_market_state(self):
+        return self.data.iloc[self.t].values[4*self.n_levels+1:]
+    def get_agent_state(self):
+        return np.array([self.inventory, self.theta_a, self.theta_b])
+    def get_full_state(self):
+        return np.concatenate((self.get_market_state(), self.get_agent_state()))
     
+
+    def get_state(self):
+        return self.get_full_state()
+    def reset(self):
+        self.t = 0
+        self.inventory = 0
+        self.theta_a = None
+        self.theta_b = None
+        self.orders = []
+        return self.get_state()
 
 
     def match_orders(self, lob_t):
@@ -112,10 +131,10 @@ class EnvironmentState:
         return transactions_ask, transactions_bid
     
 
-    def update(self, action, ref_price, half_spread, lob):
+    def update(self, action, half_spread):
         assert action in range(len(EnvironmentState.ACTION_SPACE))
         self.theta_a, self.theta_b = EnvironmentState.ACTION_SPACE[action]
-        
+        ref_price = self.get_ref_price()
         past_inventory = self.inventory
         
         # Do the action
@@ -136,7 +155,7 @@ class EnvironmentState:
                 pass
         
         # Check if there are matching orders
-        transactions_ask, transactions_bid = self.match_orders(lob)
+        transactions_ask, transactions_bid = self.match_orders(self.get_lob_t())
         # Compute phi_a and phi_b
         phi_a = 0
         for price, volume in transactions_ask:
@@ -145,4 +164,14 @@ class EnvironmentState:
         for price, volume in transactions_bid:
             phi_b += volume * (ref_price - price)
         # Compute inventory portion of reward
-        pass
+        mid_price_change = self.get_mid_price_movement()
+        psi = mid_price_change * past_inventory
+        # Compute psi dampening factor
+        psi = PsiDampening.asymm_damp(psi, 0.5)
+        # Compute the reward
+        reward = phi_a + phi_b + psi
+
+        # Update the time
+        self.t += 1
+
+        return reward
