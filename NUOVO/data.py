@@ -11,7 +11,7 @@ class DataGenerator:
     """
     @staticmethod
     def generator(filename, levels = 1): # CHANGE LEVELS TO 5 QUANDO USEREMO IL FILE "VERO"
-        df = pd.read_parquet(filename).head(10000)
+        df = pd.read_parquet(filename)
 
         data = {}
         for level in range(1, levels + 1):

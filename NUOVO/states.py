@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from collections import deque
+
 
 
 
@@ -38,12 +40,13 @@ class EnvironmentState:
 
     def __init__(self, data, n_levels, horizon):
         self.t = 0
+        self.episode = 0
         self.n_levels = n_levels
         self.data = data
         self.inventory = 0
         self.theta_a = None
         self.theta_b = None
-        self.orders = []
+        self.orders = deque()
         self.alpha = 0.5
         self.horizon = horizon
     
@@ -76,7 +79,7 @@ class EnvironmentState:
         self.inventory = 0
         self.theta_a = None
         self.theta_b = None
-        self.orders = []
+        self.orders = deque()
         self.alpha = 0.5
         return self.get_state()
 
@@ -105,12 +108,9 @@ class EnvironmentState:
         transactions_ask = []
         transactions_bid = []
 
-        print("Orders")
-        print(self.orders, end='\n\n')        
-
         for i in range(len(self.orders)):
-            print("Order", i)
-            price, volume, side = self.orders[i]
+            # price, volume, side = self.orders[i]
+            price, volume, side = self.orders.popleft()
             if side == 'bid':
                 # We want to buy
                 for level in range(self.n_levels):
@@ -128,12 +128,15 @@ class EnvironmentState:
                         # Update the order
                         volume -= match_volume
                         # Update the order in the list
-                        self.orders[i] = (price, volume, side)
+                        # self.orders[i] = (price, volume, side)
                         # Check if the order is completed
-                        if volume == 0:
-                            print("Order completed")
+                        # if volume == 0:
+                        #     print("Order completed")
                             # Remove the order
-                            self.orders.pop(i)
+                            # self.orders.pop(i)
+                if volume > 0:
+                    # The order is not completed
+                    self.orders.append((price, volume, side))
             else:
                 # We want to sell
                 for level in range(self.n_levels):
@@ -151,12 +154,15 @@ class EnvironmentState:
                         # Update the order
                         volume -= match_volume
                         # Update the order in the list
-                        self.orders[i] = (price, volume, side)
+                        # self.orders[i] = (price, volume, side)
                         # Check if the order is completed
-                        if volume == 0:
-                            print("Order completed")
+                        # if volume == 0:
+                        #     print("Order completed")
                             # Remove the order
-                            self.orders.pop(i)
+                            # self.orders.pop(i)
+                if volume > 0:
+                    # The order is not completed
+                    self.orders.append((price, volume, side))
         return transactions_ask, transactions_bid
     
 
@@ -170,7 +176,7 @@ class EnvironmentState:
         # Do the action
         if self.theta_a < 0 and self.theta_b < 0:
             market_orders = self.clear_inventory()
-            self.orders.extend(market_orders)
+            # self.orders.extend(market_orders)
         else:
             # Compute the bid and ask prices along with the volume
             p_a = ref_price + (half_spread * self.theta_a)
@@ -186,11 +192,14 @@ class EnvironmentState:
         transactions_ask, transactions_bid = self.match_orders() # Inventory can change inside this function
         # Compute phi_a and phi_b
         phi_a = 0
+        bankroll = 0
         for price, volume in transactions_ask:
             phi_a += volume * (price - ref_price)
+            bankroll += volume * price
         phi_b = 0
         for price, volume in transactions_bid:
             phi_b += volume * (ref_price - price)
+            bankroll -= volume * price
             
         # Update the time
         self.t += 1
@@ -204,4 +213,4 @@ class EnvironmentState:
         reward = phi_a + phi_b + psi
 
 
-        return self.get_state(), reward, (self.t == self.horizon)
+        return self.get_state(), reward, (self.t == self.horizon), bankroll

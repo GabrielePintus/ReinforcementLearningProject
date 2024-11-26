@@ -1,6 +1,8 @@
 import numpy as np
 import random
 import torch
+from states import EnvironmentState
+from tqdm.auto import tqdm
 
 
 class LearningAgent:
@@ -32,8 +34,13 @@ class LearningAgent:
         self.gamma = gamma
         
     def target_policy(self, state):
-        q_values = self.q_value_approximator.predict(state).cpu().detach().numpy()
-        print('Q-values', q_values)
+        # For each action, predict the Q-value and return the action with the highest Q-value
+        q_values = np.zeros(self.action_size)
+        for action in range(10):
+            state[-2] = EnvironmentState.ACTION_SPACE[action][0]
+            state[-1] = EnvironmentState.ACTION_SPACE[action][1]
+            x = np.concatenate([state, [action]]).astype(np.float32)
+            q_values[action] = self.q_value_approximator.predict(x).cpu().detach().numpy()
         return np.argmax(q_values)  # Exploit
     
     def behaviour_policy(self, state):
@@ -47,14 +54,18 @@ class LearningAgent:
 
     def train(self, env, n_episodes):
         rewards = np.zeros(n_episodes)
+        bankrolls = np.zeros(n_episodes)
+        losses = []
         
+        # for episode in tqdm(range(n_episodes)):
         for episode in range(n_episodes):
             state = env.reset()
             done = False
             total_reward = 0
+            total_bankroll = 0
             
             while not done:
-                print('Time', env.t)
+                # print('Time', env.t)
                 # Choose action based on the behaviour policy
                 if env.t > 0:
                     action = self.behaviour_policy(state)
@@ -64,36 +75,37 @@ class LearningAgent:
                     theta_a, theta_b = env.ACTION_SPACE[action]
                     state[-2] = theta_a
                     state[-1] = theta_b
-                    
-                print('Action', action)
                 
                 # Take action and observe next state and reward
-                next_state, reward, done = env.update(action)
-                print('Next state', next_state)
+                next_state, reward, done, bankroll = env.update(action)
                 
                 # Learn from the transition
                 if not done:
-                    self.learn(state, action, reward, next_state)
+                    loss = self.learn(state, action, reward, next_state)
+                    losses.append(loss)
                 
                 # Update the state
                 state = next_state
                 total_reward += reward if not done else 0
+                total_bankroll += bankroll if not done else 0
                 
             # Update epsilon
             self.update_epsilon()
             
             # Store the total reward
             rewards[episode] = total_reward
+            bankrolls[episode] = total_bankroll
+        
+        return rewards, losses, bankrolls
         
     def learn(self, state, action, reward, next_state):
         # Combine the current state and action
         x = np.concatenate([state, [action]]).astype(np.float32)
-        print('State', x)
-        x = torch.tensor(x, dtype=torch.float32).to(self.q_value_approximator.model.device)
+        x = torch.tensor(x, dtype=torch.float32, requires_grad=True).to(self.q_value_approximator.model.device)
         
         # Compute y_pred
         y_pred = self.q_value_approximator.predict(x)
-        
+
         # Compute y_true
         preds = np.zeros(self.action_size)
         for a in range(self.action_size):
@@ -101,10 +113,11 @@ class LearningAgent:
             x_next = torch.tensor(x_next, dtype=torch.float32).to(self.q_value_approximator.model.device)
             preds[a] = self.q_value_approximator.predict(x_next).item()
         y_true = [reward + self.gamma * np.max(preds)]
-        print('Y_true', y_true)
         
         # Update the Q-value approximator - Returns the loss
-        _ = self.q_value_approximator.update(y_true, y_pred)
+        loss = self.q_value_approximator.update(y_true, y_pred)
+
+        return loss
         
         
        
