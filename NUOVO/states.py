@@ -51,7 +51,7 @@ class EnvironmentState:
         self.horizon = horizon
     
     def sample_order_volume(self):
-        size = 100
+        size = 1000
         return size, size    
     
     # Getters

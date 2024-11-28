@@ -158,6 +158,7 @@ class TilingApproximatorSmall:
         self.shifts = shifts        
         # self.model = KernelRidge(kernel='poly', degree=2, gamma=0.5)
         self.model = LinearRegression()
+        self.init_weights()
         
     def rescale(self, state):
         return (state - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
@@ -179,6 +180,10 @@ class TilingApproximatorSmall:
             return self.model.predict([z])[0]
         except NotFittedError:
             return 0
+        
+    def init_weights(self):
+        self.model.coef_ = np.random.normal(0, 0.1, self.n_tilings*len(self.bounds))
+        self.model.intercept_ = 0
 
     def fit(self, X, y):
         Z = np.array([self.tile_encode(x) for x in X])
@@ -231,9 +236,8 @@ class TilingApproximatorMedium:
     def update(self, X, y):
         Z = np.array([self.tile_encode(x) for x in X])
         Z = Z.reshape(Z.shape[0], -1)
-        # self.model.fit(Z, y)
-        print("Z ", Z)
-        print("y ", y)
+        # print("Z ", Z)
+        # print("y ", y)
         if self.initialized:
             self.model.partial_fit(Z, y)
         else:
@@ -247,7 +251,7 @@ class TilingApproximatorMedium:
         try:
             return self.model.predict(z)[0]
         except NotFittedError:
-            return 0.1
+            return 0
 
 
 
