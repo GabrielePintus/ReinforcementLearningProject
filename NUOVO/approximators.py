@@ -208,6 +208,11 @@ class TilingApproximatorMedium:
             shuffle=True,
         )
         self.initialized = False
+        self.init_weights()
+    
+    def init_weights(self):
+        self.model.coef_ = np.random.normal(0, 0.1, self.n_tilings*len(self.bounds))
+        self.model.intercept_ = 0
 
     def rescale(self, state):
         return (state - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
