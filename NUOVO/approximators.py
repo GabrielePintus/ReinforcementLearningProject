@@ -141,8 +141,9 @@ class QValueApproximator:
 
 
 
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
 from sklearn.kernel_ridge import KernelRidge
+from sklearn.exceptions import NotFittedError
 # Random forest regressor
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
@@ -155,7 +156,8 @@ class TilingApproximatorSmall:
         self.n_tiles = n_tiles
         self.n_tilings = n_tilings
         self.shifts = shifts        
-        self.model = KernelRidge(kernel='poly', degree=2, gamma=0.5)
+        # self.model = KernelRidge(kernel='poly', degree=2, gamma=0.5)
+        self.model = LinearRegression()
         
     def rescale(self, state):
         return (state - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
@@ -173,7 +175,10 @@ class TilingApproximatorSmall:
 
     def predict(self, state):
         z = self.tile_encode(state)
-        return self.model.predict([z])[0]
+        try:
+            return self.model.predict([z])[0]
+        except NotFittedError:
+            return 0
 
     def fit(self, X, y):
         Z = np.array([self.tile_encode(x) for x in X])
@@ -187,7 +192,17 @@ class TilingApproximatorMedium:
         self.n_tiles = n_tiles
         self.n_tilings = n_tilings
         self.shifts = shifts
-        self.model = LinearRegression()
+        # self.model = LinearRegression()
+        self.model = SGDRegressor(
+            max_iter=1,
+            tol=None,
+            penalty='l2',
+            alpha=1e-5,
+            learning_rate='adaptive',
+            eta0=1e-5,
+            shuffle=True,
+        )
+        self.initialized = False
 
     def rescale(self, state):
         return (state - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
@@ -206,12 +221,33 @@ class TilingApproximatorMedium:
     def fit(self, X, y):
         Z = np.array([self.tile_encode(x) for x in X])
         Z = Z.reshape(Z.shape[0], -1)
-        self.model.fit(Z, y)
+        # self.model.fit(Z, y)
+        if self.initialized:
+            self.model.partial_fit(Z, y)
+        else:
+            self.model.fit(Z, y)
+            self.initialized = True
 
+    def update(self, X, y):
+        Z = np.array([self.tile_encode(x) for x in X])
+        Z = Z.reshape(Z.shape[0], -1)
+        # self.model.fit(Z, y)
+        print("Z ", Z)
+        print("y ", y)
+        if self.initialized:
+            self.model.partial_fit(Z, y)
+        else:
+            self.model.fit(Z, y)
+            self.initialized = True
+        mse = mean_squared_error(y, self.model.predict(Z))
+        return mse
+    
     def predict(self, state):
-        z = self.tile_encode(state)
-        z = z.reshape(1, -1)
-        return self.model.predict(z)[0]
+        z = self.tile_encode(state).reshape(1, -1)
+        try:
+            return self.model.predict(z)[0]
+        except NotFittedError:
+            return 0.1
 
 
 
@@ -234,6 +270,10 @@ if __name__ == "__main__":
     # Fit the model
     tiling.fit(X, y)
 
+    # Encode the first data point
+    z = tiling.tile_encode(X[0])
+    print("Encoded state:", z)
+
     # Predict the first data point
     y_preds = [tiling.predict(x) for x in X]
     train_mse = mean_squared_error(y, y_preds)
@@ -244,7 +284,11 @@ if __name__ == "__main__":
     y_preds = [tiling.predict(x) for x in X_test]
     test_mse = mean_squared_error(y_test, y_preds)
     print("Test MSE:", test_mse)
-    
+
+    # Show the weights
+    coefs = tiling.model.coef_
+    print("Weights mean:", np.mean(coefs), "std:", np.std(coefs))
+    print(1/len(coefs))
 
 
 

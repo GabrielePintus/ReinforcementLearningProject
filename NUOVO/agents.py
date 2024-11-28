@@ -40,7 +40,7 @@ class LearningAgent:
             state[-2] = EnvironmentState.ACTION_SPACE[action][0]
             state[-1] = EnvironmentState.ACTION_SPACE[action][1]
             x = np.concatenate([state, [action]]).astype(np.float32)
-            q_values[action] = self.q_value_approximator.predict(x).cpu().detach().numpy()
+            q_values[action] = self.q_value_approximator.predict(x)
         return np.argmax(q_values)  # Exploit
     
     def behaviour_policy(self, state):
@@ -52,7 +52,53 @@ class LearningAgent:
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
 
 
-    def train(self, env, n_episodes):
+    # def train(self, env, n_episodes, buffer_size=20):
+    #     rewards = np.zeros(n_episodes)
+    #     bankrolls = np.zeros(n_episodes)
+    #     losses = []
+        
+    #     # for episode in tqdm(range(n_episodes)):
+    #     for episode in range(n_episodes):
+    #         state = env.reset()
+    #         done = False
+    #         total_reward = 0
+    #         total_bankroll = 0
+            
+    #         while not done:
+    #             # print('Time', env.t)
+    #             # Choose action based on the behaviour policy
+    #             if env.t > 0:
+    #                 action = self.behaviour_policy(state)
+    #             else:
+    #                 action = np.random.randint(self.action_size)
+    #                 # Update the state - update theta_a and theta_b
+    #                 theta_a, theta_b = env.ACTION_SPACE[action]
+    #                 state[-2] = theta_a
+    #                 state[-1] = theta_b
+                
+    #             # Take action and observe next state and reward
+    #             next_state, reward, done, bankroll = env.update(action)
+                
+    #             # Learn from the transition
+    #             if not done:
+    #                 loss = self.learn(state, action, reward, next_state)
+    #                 losses.append(loss)
+                
+    #             # Update the state
+    #             state = next_state
+    #             total_reward += reward if not done else 0
+    #             total_bankroll += bankroll if not done else 0
+                
+    #         # Update epsilon
+    #         self.update_epsilon()
+            
+    #         # Store the total reward
+    #         rewards[episode] = total_reward
+    #         bankrolls[episode] = total_bankroll
+        
+    #     return rewards, losses, bankrolls
+
+    def train(self, env, n_episodes, buffer_size=5):
         rewards = np.zeros(n_episodes)
         bankrolls = np.zeros(n_episodes)
         losses = []
@@ -63,6 +109,7 @@ class LearningAgent:
             done = False
             total_reward = 0
             total_bankroll = 0
+            buffer = []
             
             while not done:
                 # print('Time', env.t)
@@ -78,11 +125,23 @@ class LearningAgent:
                 
                 # Take action and observe next state and reward
                 next_state, reward, done, bankroll = env.update(action)
+
+                # Compute target value
+                q_values = np.zeros(self.action_size)
+                for a in range(self.action_size):
+                    q_values[a] = self.q_value_approximator.predict(np.concatenate([next_state, [a]]).astype(np.float32))
+                target = reward + self.gamma * np.max(q_values)
                 
                 # Learn from the transition
-                if not done:
-                    loss = self.learn(state, action, reward, next_state)
+                if len(buffer) == buffer_size:
+                    X, y = zip(*buffer)
+                    X = np.array(X)
+                    y = np.array(y)
+                    loss = self.q_value_approximator.update(X, y)
                     losses.append(loss)
+                    buffer = []
+                else:
+                    buffer.append((np.concatenate([state, [action]]).astype(np.float32), target))
                 
                 # Update the state
                 state = next_state
@@ -98,26 +157,27 @@ class LearningAgent:
         
         return rewards, losses, bankrolls
         
-    def learn(self, state, action, reward, next_state):
-        # Combine the current state and action
-        x = np.concatenate([state, [action]]).astype(np.float32)
-        x = torch.tensor(x, dtype=torch.float32, requires_grad=True).to(self.q_value_approximator.model.device)
+    # def learn(self, state, action, reward, next_state):
+    #     # Combine the current state and action
+    #     x = np.concatenate([state, [action]]).astype(np.float32)
         
-        # Compute y_pred
-        y_pred = self.q_value_approximator.predict(x)
+    #     # Compute y_pred
+    #     y_pred = self.q_value_approximator.predict(x)
 
-        # Compute y_true
-        preds = np.zeros(self.action_size)
-        for a in range(self.action_size):
-            x_next = np.concatenate([next_state, [a]])
-            x_next = torch.tensor(x_next, dtype=torch.float32).to(self.q_value_approximator.model.device)
-            preds[a] = self.q_value_approximator.predict(x_next).item()
-        y_true = [reward + self.gamma * np.max(preds)]
+    #     # Compute y_true
+    #     preds = np.zeros(self.action_size)
+    #     # X contains all the states and actions
+    #     X = np.zeros((self.action_size, len(x)))
+    #     for a in range(self.action_size):
+    #         x_next = np.concatenate([next_state, [a]])
+    #         preds[a] = self.q_value_approximator.predict(x_next)
+    #     y_true = [reward + self.gamma * np.max(preds)]
         
-        # Update the Q-value approximator - Returns the loss
-        loss = self.q_value_approximator.update(y_true, y_pred)
+    #     # Update the Q-value approximator - Returns the loss
+    #     loss = self.q_value_approximator.update(X, y_true)
 
-        return loss
+    #     return loss
+
         
         
        
