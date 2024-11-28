@@ -98,7 +98,7 @@ class LearningAgent:
         
     #     return rewards, losses, bankrolls
 
-    def train(self, env, n_episodes, buffer_size=5):
+    def train(self, env, n_episodes=1, buffer_size=16):
         rewards = np.zeros(n_episodes)
         bankrolls = np.zeros(n_episodes)
         losses = []
@@ -140,6 +140,10 @@ class LearningAgent:
                     loss = self.q_value_approximator.update(X, y)
                     losses.append(loss)
                     buffer = []
+                    # # Remove first element
+                    # buffer.pop(0)
+                    # # Add the new element
+                    # buffer.append((np.concatenate([state, [action]]).astype(np.float32), target))
                 else:
                     buffer.append((np.concatenate([state, [action]]).astype(np.float32), target))
                 

@@ -29,8 +29,6 @@ class DataGenerator:
         LOB['Book Imbalance'] = (LOB['Bid Volume 1'] - LOB['Ask Volume 1']) / (LOB['Bid Volume 1'] + LOB['Ask Volume 1'])
         LOB['Signed Volume'] = LOB['Bid Volume 1'] - LOB['Ask Volume 1']
 
-        # Issues:
-
         # Returns = (Price at time t - Price at time t-1) / Price at time t-1
         LOB['Returns'] = LOB['Mid Price'].pct_change()
 

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from collections import deque
-
+from order import Order
 
 
 
@@ -35,8 +35,8 @@ class EnvironmentState:
         # Clear inventory
         (-1, -1),    
     )
-    MAX_INVENTORY = 10000
-    MIN_INVENTORY = -10000
+    MAX_INVENTORY = 50
+    MIN_INVENTORY = -50
 
     def __init__(self, data, n_levels, horizon):
         self.t = 0
@@ -51,7 +51,7 @@ class EnvironmentState:
         self.horizon = horizon
     
     def sample_order_volume(self):
-        size = 1000
+        size = 5
         return size, size    
     
     # Getters
@@ -80,7 +80,7 @@ class EnvironmentState:
         self.theta_a = None
         self.theta_b = None
         self.orders = deque()
-        self.alpha = 0.5
+        self.alpha = 1
         return self.get_state()
 
 
@@ -89,11 +89,11 @@ class EnvironmentState:
         best_price, side = None, None
         if v < 0:
             # We need to buy
-            best_price = self.get_lob_t()[2]
+            best_price = self.get_lob_t()[0]
             side = 'bid'
         elif v > 0:
             # We need to sell
-            best_price = self.get_lob_t()[0]
+            best_price = self.get_lob_t()[2]
             side = 'ask'
         # Add at the beginning of the list
         if best_price is not None and side is not None:
@@ -127,22 +127,22 @@ class EnvironmentState:
                         self.inventory += match_volume
                         # Update the order
                         volume -= match_volume
-                        # Update the order in the list
-                        # self.orders[i] = (price, volume, side)
-                        # Check if the order is completed
-                        # if volume == 0:
-                        #     print("Order completed")
-                            # Remove the order
-                            # self.orders.pop(i)
-                if volume > 0:
-                    # The order is not completed
-                    self.orders.append((price, volume, side))
+                    if volume == 0:
+                        break
             else:
                 # We want to sell
                 for level in range(self.n_levels):
                     # Get price and volume at this level
                     p_b_lob = lob_t[4 * level + 2]
                     v_b_lob = lob_t[4 * level + 3]
+                    print('Level', level)
+                    if price == p_b_lob:
+                        print('Probably market order')
+                        print('N levels', self.n_levels)
+                        print('Order Price', price)
+                        print('Order Volume', volume)
+                        print('LOB Price', p_b_lob)
+                        print('LOB Volume', v_b_lob)
                     if price <= p_b_lob:
                         # We have a match                        
                         match_price = price
@@ -153,16 +153,11 @@ class EnvironmentState:
                         self.inventory -= match_volume
                         # Update the order
                         volume -= match_volume
-                        # Update the order in the list
-                        # self.orders[i] = (price, volume, side)
-                        # Check if the order is completed
-                        # if volume == 0:
-                        #     print("Order completed")
-                            # Remove the order
-                            # self.orders.pop(i)
-                if volume > 0:
-                    # The order is not completed
-                    self.orders.append((price, volume, side))
+                    # if volume == 0:
+                    #     break
+            if volume > 0:
+                # The order is not completed
+                self.orders.append((price, volume, side))
         return transactions_ask, transactions_bid
     
 
@@ -175,8 +170,7 @@ class EnvironmentState:
         
         # Do the action
         if self.theta_a < 0 and self.theta_b < 0:
-            market_orders = self.clear_inventory()
-            # self.orders.extend(market_orders)
+            self.clear_inventory()
         else:
             # Compute the bid and ask prices along with the volume
             p_a = ref_price + (half_spread * self.theta_a)
@@ -187,9 +181,32 @@ class EnvironmentState:
                 # Place the orders
                 self.orders.append((p_a, v_a, 'ask'))
                 self.orders.append((p_b, v_b, 'bid'))
+            else:
+                # Clear the inventory
+                self.theta_a, self.theta_b = -1, -1
+                self.clear_inventory()
+
+        if self.inventory > EnvironmentState.MAX_INVENTORY or self.inventory < EnvironmentState.MIN_INVENTORY:
+            print('Orders')
+            for order in self.orders:
+                print('\t', order)
+            print('.....')
+            print('LOB')
+            print(self.get_lob_t())
+            print('......')
+            print('Inventary before matching orders', self.inventory)
         
         # Check if there are matching orders
         transactions_ask, transactions_bid = self.match_orders() # Inventory can change inside this function
+
+        # LOGGING
+        if self.inventory > EnvironmentState.MAX_INVENTORY or self.inventory < EnvironmentState.MIN_INVENTORY:
+            print("Inventory out of bounds at time ", self.t)
+            print("Inventory after transactions", self.inventory)
+            print("Ask transactions\n", transactions_ask, end='\n\n')
+            print("Bid transactions\n", transactions_bid, end='\n-----\n')
+
+
         # Compute phi_a and phi_b
         phi_a = 0
         bankroll = 0
@@ -211,6 +228,7 @@ class EnvironmentState:
         psi = PsiDampening.asymm_damp(psi, 0.5)
         # Compute the reward
         reward = phi_a + phi_b + psi
+
 
 
         return self.get_state(), reward, (self.t == self.horizon), bankroll
