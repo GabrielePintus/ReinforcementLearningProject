@@ -223,15 +223,17 @@ class TilingApproximatorMedium:
 
         for tiling in range(self.n_tilings):
             s = (state + self.shifts*tiling) % 1
-            s = (s * self.n_tiles).astype(int)
-            z[tiling,:] = s
+            s = (s * self.n_tiles)
+            if np.any(np.isnan(s)) or np.any(np.isinf(s)):
+                print("Input contains NaN or Inf values")
+                print("State", state)
+            z[tiling,:] = s.astype(int)
 
         return z
     
     def fit(self, X, y):
         Z = np.array([self.tile_encode(x) for x in X])
         Z = Z.reshape(Z.shape[0], -1)
-        # self.model.fit(Z, y)
         if self.initialized:
             self.model.partial_fit(Z, y)
         else:
