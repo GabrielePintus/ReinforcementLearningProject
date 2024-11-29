@@ -115,7 +115,7 @@ class LearningAgent:
     #
     #       TRAINING
     #
-    def train(self, env, n_repetitions=1, buffer_size=16):
+    def train(self, env, n_repetitions=1, buffer_size=25):
         """
         Train the agent using the given environment.
 
@@ -124,6 +124,11 @@ class LearningAgent:
         - n_episodes (int): The number of episodes to train the agent for.
         - buffer_size (int): The size of the buffer to store transitions.
         """
+
+        losses = []
+        bankrolls = []
+        rewards = []
+
         for _ in range(n_repetitions):
             # Reset the environment
             state = env.reset()
@@ -137,7 +142,10 @@ class LearningAgent:
                 action = self.behaviour_policy(state)
                 
                 # Take action and observe next state and reward
-                next_state, reward, done, bankroll_change = env.update(action)
+                next_state, reward, done, bankroll = env.update(action)
+
+                rewards.append(reward)
+                bankrolls.append(bankroll)
 
                 # Choose the best action according to the target policy
                 best_action = self.target_policy(next_state)
@@ -148,7 +156,10 @@ class LearningAgent:
                 # Learn from the transition
                 if len(buffer) == buffer_size:
                     loss = self.learn(buffer)
+                    losses.append(loss)
                     buffer = []
+                    # buffer.pop(0)
+                    # buffer.append((state_action, target))
                 else:
                     state_action = self._combine_state_action(state, action)
                     buffer.append((state_action, target))
@@ -160,6 +171,6 @@ class LearningAgent:
             self.update_epsilon()
             
         
-        return None, None, None
+        return rewards, losses, bankrolls
         
        

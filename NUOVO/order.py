@@ -40,7 +40,3 @@ class Transaction:
         self.level = level
         self.time = time
 
-    def __str__(self):
-        text =  f'--| Time: {self.time} |--\n'
-        text += f'   Order ID: {self.order.id}, Transaction Volume: {self.transaction_volume}, Level: {self.level}'
-        return text

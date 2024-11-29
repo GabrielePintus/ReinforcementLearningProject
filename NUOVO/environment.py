@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from collections import deque
-from order import Order
+from order import Order, Transaction
 from LOB import LOB
 
 
@@ -83,13 +83,10 @@ class EnvironmentState:
         """
         if self.inventory == 0:
             return
-        
         # Compute the volume, side, and best price
         v = round(self.inventory * self.alpha)
         side = 'bid' if v < 0 else 'ask'
         best_price = self.lob.best_bid_price() if side == 'bid' else self.lob.best_ask_price()
-
-
         # Place the market order
         market_order = Order(best_price, abs(v), side, market=True, t=self.t)
         self.orders.insert(0, market_order)
@@ -113,8 +110,9 @@ class EnvironmentState:
 
     def match_orders(self):
         # Check the orders from the oldest to the newest
-        transactions_ask = []
-        transactions_bid = []
+        # transactions_ask = []
+        # transactions_bid = []
+        transactions = []
 
         for i in range(len(self.orders)):
             # Get the order
@@ -131,7 +129,7 @@ class EnvironmentState:
                         match_price = order.price
                         match_volume = min(order.volume, v_a_lob)
                         # Track the transaction
-                        transactions_bid.append((match_price, match_volume))
+                        transactions.append( Transaction(order, match_volume, level, self.t) )
                         # Perform the transaction
                         self.perform_transaction(order, match_volume)
                     if order.volume == 0:
@@ -146,7 +144,7 @@ class EnvironmentState:
                         match_price = order.price
                         match_volume = min(order.volume, v_b_lob)
                         # Track the transaction
-                        transactions_ask.append((match_price, match_volume))
+                        transactions.append( Transaction(order, match_volume, level, self.t) )
                         # Perform the transaction
                         self.perform_transaction(order, match_volume)
                     if order.volume == 0:
@@ -155,24 +153,31 @@ class EnvironmentState:
                 # The order is not completed
                 self.orders.append(order)
 
-        # Remove empty orders
-        self.orders = [order for order in self.orders if order.volume > 0]
-
-        return transactions_ask, transactions_bid
+        return transactions
     
 
     def _compute_prices(self):
         p_a = self.lob.get_ref_price() + (self.lob.get_half_spread() * self.theta_a)
         p_b = self.lob.get_ref_price() + (self.lob.get_half_spread() * self.theta_b)
         return p_a, p_b
+    
+    def _compute_phis(self, transactions):
+        phi_a, phi_b, bankroll = 0, 0, 0
+        for transaction in transactions:
+            p, v = transaction.order.price, transaction.transaction_volume
+            if transaction.order.side == 'ask':
+                phi_a    += v * (p - self.lob.get_ref_price())
+                bankroll += v * p
+            else:
+                phi_b    += v * (self.lob.get_ref_price() - p)
+                bankroll += -v * p
+        return phi_a, phi_b, bankroll
 
     def update(self, action):
         assert action in range(len(EnvironmentState.ACTION_SPACE))
         
         # Get some useful values
         self.theta_a, self.theta_b = EnvironmentState.ACTION_SPACE[action]
-        ref_price   = self.lob.get_ref_price()
-        half_spread = self.lob.get_half_spread()
         
         # Do the action
         if self.theta_a < 0 and self.theta_b < 0:
@@ -193,19 +198,10 @@ class EnvironmentState:
 
         
         # Check if there are matching orders
-        transactions_ask, transactions_bid = self.match_orders() # Inventory can change inside this function
-
+        transactions = self.match_orders() # Inventory can change inside this function
 
         # Compute phi_a and phi_b
-        phi_a = 0
-        bankroll = 0
-        for price, volume in transactions_ask:
-            phi_a += volume * (price - ref_price)
-            bankroll += volume * price
-        phi_b = 0
-        for price, volume in transactions_bid:
-            phi_b += volume * (ref_price - price)
-            bankroll -= volume * price
+        phi_a, phi_b, bankroll = self._compute_phis(transactions)
             
         # Update the time
         self.t += 1

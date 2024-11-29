@@ -197,13 +197,12 @@ class TilingApproximatorMedium:
         self.n_tiles = n_tiles
         self.n_tilings = n_tilings
         self.shifts = shifts
-        # self.model = LinearRegression()
         self.model = SGDRegressor(
             max_iter=1,
             tol=None,
             penalty='l2',
-            alpha=1e-5,
-            learning_rate='adaptive',
+            alpha=1e-3,
+            learning_rate='constant',
             eta0=1e-5,
             shuffle=True,
         )
@@ -243,8 +242,6 @@ class TilingApproximatorMedium:
     def update(self, X, y):
         Z = np.array([self.tile_encode(x) for x in X])
         Z = Z.reshape(Z.shape[0], -1)
-        # print("Z ", Z)
-        # print("y ", y)
         if self.initialized:
             self.model.partial_fit(Z, y)
         else:
