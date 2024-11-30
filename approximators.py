@@ -141,54 +141,8 @@ class QValueApproximator:
 
 
 
-from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
-from sklearn.kernel_ridge import KernelRidge
+from sklearn.linear_model import SGDRegressor
 from sklearn.exceptions import NotFittedError
-# Random forest regressor
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
-
-
-class TilingApproximatorSmall:
-
-    def __init__(self, bounds, n_tiles, n_tilings, shifts):
-        self.bounds = bounds
-        self.n_tiles = n_tiles
-        self.n_tilings = n_tilings
-        self.shifts = shifts        
-        # self.model = KernelRidge(kernel='poly', degree=2, gamma=0.5)
-        self.model = LinearRegression()
-        self.init_weights()
-        
-    def rescale(self, state):
-        return (state - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
-
-    def tile_encode(self, state):
-        # Rescale and convert to grid coordinates
-        z = np.zeros(self.n_tilings)
-        state = self.rescale(state)
-
-        for tiling in range(self.n_tilings):
-            s = (state + self.shifts*tiling) % 1
-            s = (s * self.n_tiles).astype(int)
-            z[tiling] = np.ravel_multi_index(s, [self.n_tiles] * len(s), order='C')
-        return z
-
-    def predict(self, state):
-        z = self.tile_encode(state)
-        try:
-            return self.model.predict([z])[0]
-        except NotFittedError:
-            return 0
-        
-    def init_weights(self):
-        self.model.coef_ = np.random.normal(0, 0.1, self.n_tilings*len(self.bounds))
-        self.model.intercept_ = 0
-
-    def fit(self, X, y):
-        Z = np.array([self.tile_encode(x) for x in X])
-        self.model.fit(Z, y)
-
 
 class TilingApproximatorMedium:
 
