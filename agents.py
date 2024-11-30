@@ -128,6 +128,8 @@ class LearningAgent:
         losses = []
         bankrolls = []
         rewards = []
+        actions = []
+        epsilon = []
 
         for _ in range(n_repetitions):
             # Reset the environment
@@ -140,9 +142,15 @@ class LearningAgent:
             while not done:
                 # Choose an action based on the behaviour policy (epsilon-greedy)
                 action = self.behaviour_policy(state)
+                actions.append(action)
+                epsilon.append(self.epsilon)
                 
                 # Take action and observe next state and reward
                 next_state, reward, done, bankroll = env.update(action)
+
+                # HARDOCDE
+                # if action == 9:
+                #     reward = -10
 
                 rewards.append(reward)
                 bankrolls.append(bankroll)
@@ -171,6 +179,6 @@ class LearningAgent:
             self.update_epsilon()
             
         
-        return rewards, losses, bankrolls
+        return rewards, losses, bankrolls, actions, epsilon
         
        

@@ -10,8 +10,11 @@ class DataGenerator:
         levels (int): Number of levels in the order book
     """
     @staticmethod
-    def generator(filename, levels = 1): # CHANGE LEVELS TO 5 QUANDO USEREMO IL FILE "VERO"
+    def generator(filename, levels = 1, downsample_period=10): # CHANGE LEVELS TO 5 QUANDO USEREMO IL FILE "VERO"
         df = pd.read_parquet(filename)
+
+        # Downsample the data
+        df = df.iloc[::downsample_period]        
 
         data = {}
         for level in range(1, levels + 1):
