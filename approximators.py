@@ -35,6 +35,7 @@ class MLP(nn.Module):
         for i in range(1, len(self.hidden_sizes)):
             self.layers.append(nn.Dropout(self.dropout))
             self.layers.append(nn.Linear(self.hidden_sizes[i-1], self.hidden_sizes[i]))
+            nn.BatchNorm1d(self.hidden_sizes[i])
             self.layers.append(self.activation)
         self.layers.append(nn.Dropout(self.dropout))
         self.layers.append(nn.Linear(self.hidden_sizes[-1], self.output_size))
@@ -156,16 +157,11 @@ class TilingApproximatorMedium:
             tol=None,
             penalty='l2',
             alpha=1e-3,
-            learning_rate='constant',
+            learning_rate='adaptive',
             eta0=1e-5,
             shuffle=True,
         )
         self.initialized = False
-        self.init_weights()
-    
-    def init_weights(self):
-        self.model.coef_ = np.random.normal(0, 0.1, self.n_tilings*len(self.bounds))
-        self.model.intercept_ = 0
 
     def rescale(self, state):
         return (state - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
@@ -210,6 +206,65 @@ class TilingApproximatorMedium:
             return self.model.predict(z)[0]
         except NotFittedError:
             return 0
+
+
+
+
+class NeuralNet:
+
+    def __init__(self, input_dim, n_epochs=1, device=torch.device('cpu')):
+        self.n_epochs = n_epochs
+        self.model = MLP(
+            input_size=input_dim,
+            output_size=1,
+            hidden_sizes=[128, 128, 64],
+            activation=nn.Tanh,
+            dropout=0.1,
+            device=device
+        ).to(device)
+        self.criterion = nn.MSELoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-6, weight_decay=1e-5)#, betas=(0.9, 0.999))
+    
+
+    def update(self, X, y):
+        # Set model to training mode
+        self.model.train()
+        # Create data loader
+        data_loader = torch.utils.data.DataLoader(list(zip(X, y)), batch_size=35, shuffle=True)
+        # Train the model
+        losses = []
+        for epoch in range(self.n_epochs):
+            for x, y in data_loader:
+                # Move data to the appropriate device
+                x = x.to(self.model.device).float()
+                y = y.to(self.model.device).view(-1, 1).float()
+                # Zero the gradients
+                self.optimizer.zero_grad()
+                # Forward pass
+                y_pred = self.model(x)
+                # print(y_pred.shape, y.shape)
+                loss = self.criterion(y_pred, y)
+                # Backward pass
+                loss.backward()
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
+                # Update weights
+                self.optimizer.step()
+                # Append loss
+                losses.append(loss.item())
+        return losses[-1]
+    
+    def predict(self, state):
+        # Set model to evaluation mode
+        self.model.eval()
+        with torch.no_grad():
+            state = torch.tensor(state, dtype=torch.float32).to(self.model.device).view(1, -1)
+            y_pred = self.model(state)
+        return y_pred.item()
+    
+                
+        
+
 
 
 
