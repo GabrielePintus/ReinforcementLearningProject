@@ -1,191 +1,9 @@
 import gymnasium as gym
 import numpy as np
+from tqdm import tqdm
 
 
 class LearningAgent:
-    
-    def __init__(
-        self,
-        env : gym.Env,
-        discount_factor=0.99,
-        initial_epsilon=0.5,
-        epsilon_decay=0.97,
-        min_epsilon=0.0,
-        q_value_approximator=None,
-        seed = 0
-    ):
-        self.env = env
-        self.discount_factor = discount_factor
-        self.seed = seed
-        
-        # Epsilon-greedy parameters
-        self.epsilon = initial_epsilon
-        self.epsilon_decay = epsilon_decay  
-        self.min_epsilon = min_epsilon
-        
-        # Q-value approximator
-        self.q_value_approximator = q_value_approximator
-        
-    
-    #
-    #    POLICIES
-    #   
-    def random_policy(self):
-        """
-        Choose a random action.
-        """
-        return self.env.action_space.sample()
-    
-    def target_policy(self, state):
-        """
-        Choose the best action according to the target policy.
-        """
-        raise NotImplementedError
-    
-    def behaviour_policy(self, state):
-        """
-        Epsilon-greedy policy for exploration.
-        """
-        action = self.random_policy() if np.random.rand() < self.epsilon else self.target_policy(state)
-        return np.array(action)
-        
-    def update_epsilon(self):
-        """
-        Update epsilon value.
-        """
-        epsilon = self.epsilon * self.epsilon_decay
-        self.epsilon = max(self.min_epsilon, epsilon)
-        
-    #
-    #    LEARNING
-    #
-    
-    def learn(self, n_episodes=1000):
-        """
-        Learn the optimal policy.
-        """
-        raise NotImplementedError
-    
-    def evaluate(self, n_episodes=100):
-        """
-        Evaluate the agent's performance.
-        """
-        raise NotImplementedError
-    
-    def play(self, n_episodes=1):
-        """
-        Play the game using the learned policy.
-        """
-        raise NotImplementedError
-    
-    
-        
-    
-
-#
-#      Q-LEARNING AGENT
-#
-from sklearn.mixture import GaussianMixture
-
-class QLearningAgent(LearningAgent):
-    
-    def __init__(
-        self,
-        env : gym.Env,
-        discount_factor=0.99,
-        initial_epsilon=0.5,
-        epsilon_decay=0.97,
-        min_epsilon=0.0,
-        q_value_approximator=None,
-        seed = 0  
-    ):
-        super().__init__(
-            env,
-            discount_factor,
-            initial_epsilon,
-            epsilon_decay,
-            min_epsilon,
-            q_value_approximator,
-            seed
-        )
-        
-        # Place a Gaussian Mixture Model on the action space
-        self.n_components = 10
-        try:
-            self.n_dims = env.action_space.shape[0] 
-        except Exception:
-            self.n_dims = env.action_space.n
-        self.action_space_model = GaussianMixture(
-            n_components=self.n_components,
-            covariance_type='full',
-            random_state=self.seed,
-            init_params='random'
-        )
-        # Initialize the model
-        self.action_space_model.fit(np.zeros((self.n_components, self.n_dims)))
-        
-    
-    def target_policy(self, state, n_samples=100):
-        """
-        Choose the best action according to the target policy.
-        """
-        # Sample actions from the action space model
-        actions, _ = self.action_space_model.sample(n_samples)
-        
-        # Compute Q-values for each action
-        q_values = np.zeros(n_samples)
-        for i in range(n_samples):
-            action = actions[i]
-            sa_couple = np.concatenate([state, action], axis=0)
-            pred = self.q_value_approximator.predict(sa_couple)
-            q_values[i] = pred
-            
-        # Return the action with the highest Q-value
-        return actions[np.argmax(q_values)]
-    
-    
-    def train(self, state, buffer=[], buffer_size=10):
-        """
-        Train the agent.
-        """
-        losses = []
-        # Sample action from the behaviour policy
-        action = self.behaviour_policy(state)
-        sa_couple = np.concatenate([state, action], axis=0)
-        
-        # Take action and observe reward and next state
-        # next_state, reward, done, truncated, info = self.env.step(action)
-        next_state, reward, done, _, _ = self.env.step(action)
-        
-        # Compute the best action for the next state
-        next_action = self.target_policy(next_state)
-        next_sa_couple = np.concatenate([next_state, next_action], axis=0)
-        
-        # Compute the target Q-value
-        target = reward + self.discount_factor * self.q_value_approximator.predict(next_sa_couple)
-        
-        # Update the Q-value approximator
-        if len(buffer) < buffer_size:
-            buffer.append((sa_couple, target))
-        else:
-            X = np.array([x[0] for x in buffer])
-            y = np.array([x[1] for x in buffer])
-            loss = self.q_value_approximator.update(X, y)
-
-            losses.append(loss)
-            # Reset buffer
-        
-        return next_state, reward, done, buffer, losses
-        
-        
-        
-
-
-
-
-from tqdm import tqdm
-
-class QAgent:
 
     def __init__(
             self,
@@ -207,9 +25,6 @@ class QAgent:
         self.epsilon_decay = epsilon_decay
         self.min_epsilon = min_epsilon
 
-        # Q-value approximator
-        self.q_values = np.zeros((env.observation_space.n, env.action_space.n))
-
     def target_policy(self, state):
         """
         Choose the best action according to the target policy.
@@ -229,12 +44,12 @@ class QAgent:
         action = self.random_policy() if np.random.rand() < self.epsilon else self.target_policy(state)
         return action
     
-    def update_epsilon(self, n_episodes):
+    def update_epsilon(self):
         """
         Update epsilon value.
         """
         # Linear decay over episodes
-        epsilon = self.epsilon - 1 / n_episodes
+        epsilon = self.epsilon * self.epsilon_decay
         self.epsilon = max(self.min_epsilon, epsilon)
 
 
@@ -242,12 +57,58 @@ class QAgent:
         """
         Learn the optimal policy.
         """
+        raise NotImplementedError
+
+    def play(self, n_episodes=1):
+        """
+        Play the game using the learned policy.
+        """
         rewards = []
+        for episode in range(n_episodes):
+            state, _ = self.env.reset()
+            done = False
+            total_reward = 0
+            while not done:
+                action = self.target_policy(state)
+                next_state, reward, done, _, _ = self.env.step(action)
+                total_reward += reward
+                state = next_state
+            rewards.append(total_reward)
+        return rewards
+
+
+
+
+
+class QAgent(LearningAgent):
+
+    def __init__(
+            self,
+            env : gym.Env,
+            discount_factor=0.99,
+            initial_epsilon=0.5,
+            epsilon_decay=0.97,
+            min_epsilon=0.0,
+            learning_rate=0.9,
+            seed = 0
+        ):
+        super().__init__(env, discount_factor, initial_epsilon, epsilon_decay, min_epsilon, learning_rate, seed)
+
+        # Q-value approximator
+        self.q_values = np.zeros((env.observation_space.n, env.action_space.n))
+
+    def learn(self, n_episodes=1000):
+        """
+        Learn the optimal policy.
+        """
+        rewards = []
+        max_steps = 100
+        steps = 0
         for _ in tqdm(range(n_episodes)):
             state, _ = self.env.reset()
             done = False
             cum_reward = 0
-            while not done:
+            while not done and steps < max_steps:
                 # Sample action from the behaviour policy
                 action = self.behaviour_policy(state)
 
@@ -273,33 +134,17 @@ class QAgent:
                 # Update Eligibility Trace and Q-values
                 self.q_values[state, action] += delta * self.learning_rate
                 state = next_state
-            self.update_epsilon(n_episodes)
+                steps += 1
+            self.update_epsilon()
             rewards.append(cum_reward)
 
-        return rewards
-
-    def play(self, n_episodes=1):
-        """
-        Play the game using the learned policy.
-        """
-        rewards = []
-        for episode in range(n_episodes):
-            state, _ = self.env.reset()
-            done = False
-            total_reward = 0
-            while not done:
-                action = self.target_policy(state)
-                next_state, reward, done, _, _ = self.env.step(action)
-                total_reward += reward
-                state = next_state
-            rewards.append(total_reward)
         return rewards
     
 
 
 
 
-class QLambdaAgent:
+class QLambdaAgent(LearningAgent):
 
     def __init__(
             self,
@@ -312,47 +157,13 @@ class QLambdaAgent:
             seed=0,
             trace_decay=0.9
         ):
-        self.env = env
-        self.discount_factor = discount_factor
-        self.seed = seed
-        self.learning_rate = learning_rate
+        super().__init__(env, discount_factor, initial_epsilon, epsilon_decay, min_epsilon, learning_rate, seed)
+
         self.trace_decay = trace_decay
-
-        # Epsilon-greedy parameters
-        self.epsilon = initial_epsilon
-        self.epsilon_decay = epsilon_decay
-        self.min_epsilon = min_epsilon
-
         # Q-value approximator
         self.q_values = np.zeros((env.observation_space.n, env.action_space.n))
         self.eligibility_trace = np.zeros((env.observation_space.n, env.action_space.n))
 
-    def target_policy(self, state):
-        """
-        Choose the best action according to the target policy.
-        """
-        return np.argmax(self.q_values[state, :])
-
-    def random_policy(self):
-        """
-        Choose a random action.
-        """
-        return self.env.action_space.sample()
-
-    def behaviour_policy(self, state):
-        """
-        Epsilon-greedy policy for exploration.
-        """
-        action = self.random_policy() if np.random.rand() < self.epsilon else self.target_policy(state)
-        return action
-
-    def update_epsilon(self):
-        """
-        Update epsilon value.
-        """
-        # Linear decay over episodes
-        epsilon = self.epsilon * self.epsilon_decay
-        self.epsilon = max(self.min_epsilon, epsilon)
 
     def learn(self, n_episodes=1000):
         """
@@ -416,26 +227,10 @@ class QLambdaAgent:
 
         return rewards
 
-    def play(self, n_episodes=1):
-        """
-        Play the game using the learned policy.
-        """
-        rewards = []
-        for _ in range(n_episodes):
-            state, _ = self.env.reset()
-            done = False
-            total_reward = 0
-            while not done:
-                action = self.target_policy(state)
-                next_state, reward, done, _, _ = self.env.step(action)
-                total_reward += reward
-                state = next_state
-            rewards.append(total_reward)
-        return rewards
 
 
 
-class SarsaAgent:
+class SarsaAgent(LearningAgent):
 
     def __init__(
             self,
@@ -447,46 +242,10 @@ class SarsaAgent:
             learning_rate=0.9,
             seed=0,
         ):
-        self.env = env
-        self.discount_factor = discount_factor
-        
-        self.seed = seed
-        self.learning_rate = learning_rate
-
-        # Epsilon-greedy parameters
-        self.epsilon = initial_epsilon
-        self.epsilon_decay = epsilon_decay
-        self.min_epsilon = min_epsilon
+        super().__init__(env, discount_factor, initial_epsilon, epsilon_decay, min_epsilon, learning_rate, seed)
 
         # Q-value approximator
         self.q_values = np.zeros((env.observation_space.n, env.action_space.n))
-
-    def target_policy(self, state):
-        """
-        Choose the best action according to the target policy.
-        """
-        return np.argmax(self.q_values[state, :])
-
-    def random_policy(self):
-        """
-        Choose a random action.
-        """
-        return self.env.action_space.sample()
-
-    def behaviour_policy(self, state):
-        """
-        Epsilon-greedy policy for exploration.
-        """
-        action = self.random_policy() if np.random.rand() < self.epsilon else self.target_policy(state)
-        return action
-
-    def update_epsilon(self):
-        """
-        Update epsilon value.
-        """
-        # Linear decay over episodes
-        epsilon = self.epsilon * self.epsilon_decay
-        self.epsilon = max(self.min_epsilon, epsilon)
 
     def learn(self, n_episodes=1000):
         """
@@ -536,7 +295,7 @@ class SarsaAgent:
         return rewards
 
 
-class SarsaLambdaAgent:
+class SarsaLambdaAgent(LearningAgent):
 
     def __init__(
             self,
@@ -549,47 +308,13 @@ class SarsaLambdaAgent:
             seed=0,
             trace_decay=0.9
         ):
-        self.env = env
-        self.discount_factor = discount_factor
-        self.seed = seed
-        self.learning_rate = learning_rate
+        super().__init__(env, discount_factor, initial_epsilon, epsilon_decay, min_epsilon, learning_rate, seed)
+        
         self.trace_decay = trace_decay
-
-        # Epsilon-greedy parameters
-        self.epsilon = initial_epsilon
-        self.epsilon_decay = epsilon_decay
-        self.min_epsilon = min_epsilon
 
         # Q-value approximator
         self.q_values = np.zeros((env.observation_space.n, env.action_space.n))
         self.eligibility_trace = np.zeros((env.observation_space.n, env.action_space.n))
-
-    def target_policy(self, state):
-        """
-        Choose the best action according to the target policy.
-        """
-        return np.argmax(self.q_values[state, :])
-
-    def random_policy(self):
-        """
-        Choose a random action.
-        """
-        return self.env.action_space.sample()
-
-    def behaviour_policy(self, state):
-        """
-        Epsilon-greedy policy for exploration.
-        """
-        action = self.random_policy() if np.random.rand() < self.epsilon else self.target_policy(state)
-        return action
-
-    def update_epsilon(self):
-        """
-        Update epsilon value.
-        """
-        # Linear decay over episodes
-        epsilon = self.epsilon * self.epsilon_decay
-        self.epsilon = max(self.min_epsilon, epsilon)
 
     def learn(self, n_episodes=1000):
         """
@@ -649,7 +374,7 @@ class SarsaLambdaAgent:
 
 
 
-class QSpatialLambdaAgent:
+class QSpatialLambdaAgent(LearningAgent):
 
     def __init__(
             self,
@@ -663,48 +388,14 @@ class QSpatialLambdaAgent:
             trace_decay=0.9,
             kernel = lambda x, y: np.exp(-np.linalg.norm(x - y))
         ):
-        self.env = env
-        self.discount_factor = discount_factor
-        self.seed = seed
-        self.learning_rate = learning_rate
+        super().__init__(env, discount_factor, initial_epsilon, epsilon_decay, min_epsilon, learning_rate, seed)
+
         self.trace_decay = trace_decay
         self.kernel = kernel
-
-        # Epsilon-greedy parameters
-        self.epsilon = initial_epsilon
-        self.epsilon_decay = epsilon_decay
-        self.min_epsilon = min_epsilon
 
         # Q-value approximator
         self.q_values = np.zeros((env.observation_space.n, env.action_space.n))
         self.eligibility_trace = np.zeros((env.observation_space.n, env.action_space.n))
-
-    def target_policy(self, state):
-        """
-        Choose the best action according to the target policy.
-        """
-        return np.argmax(self.q_values[state, :])
-
-    def random_policy(self):
-        """
-        Choose a random action.
-        """
-        return self.env.action_space.sample()
-
-    def behaviour_policy(self, state):
-        """
-        Epsilon-greedy policy for exploration.
-        """
-        action = self.random_policy() if np.random.rand() < self.epsilon else self.target_policy(state)
-        return action
-
-    def update_epsilon(self):
-        """
-        Update epsilon value.
-        """
-        # Linear decay over episodes
-        epsilon = self.epsilon * self.epsilon_decay
-        self.epsilon = max(self.min_epsilon, epsilon)
 
     def learn(self, n_episodes=1000):
         """
