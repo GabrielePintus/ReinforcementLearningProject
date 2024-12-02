@@ -391,7 +391,7 @@ class QSpatialLambdaAgent(LearningAgent):
             learning_rate=0.9,
             seed=0,
             trace_decay=0.9,
-            kernel = lambda x, y: np.exp(-np.linalg.norm(x - y))
+            kernel = lambda x, y : np.exp(-np.linalg.norm(x - y) ** 2)
         ):
         super().__init__(env, discount_factor, initial_epsilon, epsilon_decay, min_epsilon, learning_rate, seed)
 
