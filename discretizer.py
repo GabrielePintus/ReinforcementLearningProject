@@ -33,8 +33,6 @@ class TilingDiscretizer:
         else:
             z = np.zeros((self.n_tilings, len(x)))
 
-        print("Shape of Z: ", z.shape)
-
         # Rescale the input to [0, 1]
         x = self.rescale(x)
 
@@ -48,7 +46,6 @@ class TilingDiscretizer:
             y = (y * self.n_tiles).astype(int)
             if self.single_idx:
                 y = np.ravel_multi_index(y, [self.n_tiles] * len(y), order='C')
-            print("Y: ", y)
             z[i] = y
     
         return z.astype(int)
@@ -73,7 +70,8 @@ class TilingEncoder:
         y = self.rescale(x)
 
         # Bound
-        y = np.clip(y, 0, 1)
+        # y = np.clip(y, 0, 1)
+        y = (y % 1).round(8)
 
         # Discretize
         z = (y * self.tiles).astype(int)

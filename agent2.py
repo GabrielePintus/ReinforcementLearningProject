@@ -9,6 +9,30 @@ from scipy.sparse import csr_matrix, dok_matrix
 
 
 
+class custom_array(dok_matrix):
+    
+    def __init__(self, encoder, *args, **kwargs):
+        self.encoder = encoder
+        super().__init__(*args, **kwargs)
+        
+    def __getitem__(self, key):
+        # If key is a slice of none this means that we are selecting all the elements
+        # of the array. In this case we return the array itself
+        key = self.encoder(*key)
+        return super().__getitem__(key)
+    
+    def __setitem__(self, key, value):
+        key = self.encoder(*key)
+        super().__setitem__(key, value)
+        
+    def __contains__(self, key):
+        key = self.encoder(*key)
+        return super().__contains__(key)
+    
+    def __iter__(self):
+        for key in super().__iter__():
+            yield key
+
 
 class QAgent(LearningAgent):
 
@@ -27,20 +51,23 @@ class QAgent(LearningAgent):
         # Tile encoders
         self.state_encoder = TilingEncoder(
             bounds=np.array([[-1.2, 0.6], [-0.07, 0.07]]),
-            tiles=10,
+            tiles=20,
             single_idx=True
         )
-        self.state_space_n = 10 ** 2
+        self.state_space_n = 20 ** 2
         self.action_encoder = TilingEncoder(
             bounds=np.array([[-1.0, 1.0]]),
-            tiles=10,
+            tiles=20,
             single_idx=True
         )
-        self.action_space_n = 10
+        self.action_space_n = 20
+        
+        self.encoder = lambda x, y : (self.state_encoder(x), self.action_encoder(y))
 
         # Sparse Q-value approximator
         # self.q_values = dok_matrix((env.observation_space.n, env.action_space.n), dtype=np.float32)
-        self.q_values = dok_matrix((self.state_space_n, self.action_space_n), dtype=np.float32)
+        self.q_values = custom_array(self.encoder, (self.state_space_n, self.action_space_n), dtype=np.float32)
+
 
 
     def learn(self, n_episodes=1000):
@@ -57,29 +84,26 @@ class QAgent(LearningAgent):
             while not done and steps < max_steps:
                 # Sample action from the behaviour policy
                 action = self.behaviour_policy(state)
-                print("Action: ", action)
-                action = self.action_discretizer.encode(action)
-                print("Action: ", action)
+                # state = self.state_encoder(state)
 
                 # Take action and observe reward and next state
                 next_state, reward, done, _, _ = self.env.step(action)
-                next_state = self.state_discretizer.encode(next_state)
-                print("Next state: ", next_state)
+                # action = self.action_encoder(action)
+                # next_state = self.state_encoder(next_state)
 
                 # Lazyness penalty
                 # if not done:
                 #     reward += -0.1
 
                 # Check if the agent has fallen into a hole
-                if done and reward == 0:
-                    reward = -1
+                # if done and reward == 0:
+                #     reward = -1
 
                 cum_reward += reward
 
                 # Compute the best action for the next state
                 next_action = self.target_policy(next_state)
-                next_action = self.action_discretizer.encode(next_action)
-                print("Next action: ", next_action)
+                # next_action = self.action_encoder(next_action)
                 
                 target = reward + self.discount_factor * self.q_values[next_state, next_action]
                 delta = target - self.q_values[state, action]
@@ -93,3 +117,4 @@ class QAgent(LearningAgent):
             rewards.append(cum_reward)
 
         return rewards
+    

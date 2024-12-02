@@ -29,7 +29,7 @@ class LearningAgent:
         """
         Choose the best action according to the target policy.
         """
-        return np.argmax(self.q_values[state, :])
+        return np.argmax(self.q_values[state])
     
     def random_policy(self):
         """
