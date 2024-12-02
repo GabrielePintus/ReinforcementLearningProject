@@ -59,10 +59,15 @@ class LearningAgent:
         """
         raise NotImplementedError
 
-    def play(self, n_episodes=1):
+    def play(self, n_episodes=1, render = False):
         """
         Play the game using the learned policy.
         """
+        
+        if(render):
+            self.env = self.env.unwrapped
+            self.env.render_mode = 'human'
+
         rewards = []
         for episode in range(n_episodes):
             state, _ = self.env.reset()
