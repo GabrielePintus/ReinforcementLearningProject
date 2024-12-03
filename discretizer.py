@@ -1,70 +1,38 @@
 import numpy as np
-import math
+  
 
+class GridSpace:
 
-class TilingDiscretizer:
+    """
+    A class to encode and decode continuous values into discrete values.
+    
+    Parameters
+    ----------
+    bounds : np.ndarray
+        The bounds of the continuous space.
+    n_tiles : int
+        The number of tiles to discretize the space.
+    single_idx : bool
+        Whether to use a single index to encode the values.
+    """
+    
 
-    def __init__(
-        self,
-        bounds : np.array,  # The domain bounds for each dimension
-        n_tiles : int,      # The number of tiles in each dimension
-        n_tilings : int,    # The number of tilings
-        shifts : np.array,  # The shifts for each tiling
-        single_idx : bool = False
-    ):
+    def __init__(self, bounds, n_tiles, single_idx=False):
         self.bounds = bounds
         self.n_tiles = n_tiles
-        self.n_tilings = n_tilings
-        self.shifts = shifts
         self.single_idx = single_idx
 
+        self.domain = self.bounds
+        self.codomain = np.array([[0, n_tiles]] * len(bounds))
 
     def rescale(self, x):
         return (x - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
     
     def encode(self, x):
-        # if x is a number convert it to a numpy array
-        if not isinstance(x, (list, np.ndarray)):
-            x = np.array([x])
-
-        # Prepare the output
-        if self.single_idx:
-            z = np.zeros((self.n_tilings,))
-        else:
-            z = np.zeros((self.n_tilings, len(x)))
-
-        # Rescale the input to [0, 1]
-        x = self.rescale(x)
-
-        for i in range(self.n_tilings):
-            # Shift the input
-            y = x + self.shifts * i
-            # Bound the input
-            # y = np.clip(y, 0, 1)
-            y = (y % 1).round(8)
-            # Discretize the input
-            y = (y * self.n_tiles).astype(int)
-            if self.single_idx:
-                y = np.ravel_multi_index(y, [self.n_tiles] * len(y), order='C')
-            z[i] = y
-    
-        return z.astype(int)
-
-
-class TilingEncoder:
-
-    def __init__(self, bounds, tiles, single_idx=False):
-        self.bounds = bounds
-        self.tiles = tiles
-        self.single_idx = single_idx
-
-    def rescale(self, x):
-        return (x - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
-    
-    def encode(self, x):
-        # if x is a number convert it to a numpy array
-        if not isinstance(x, (list, np.ndarray)):
-            x = np.array([x])
+        """
+        Encode a continuous value into a discrete value.
+        """
+        assert type(x) == np.ndarray, 'x must be a numpy array.'
 
         # Rescale
         y = self.rescale(x)
@@ -74,30 +42,42 @@ class TilingEncoder:
         y = (y % 1).round(8)
 
         # Discretize
-        z = (y * self.tiles).astype(int)
+        z = (y * self.n_tiles).astype(int)
 
         if self.single_idx:
-            z = np.ravel_multi_index(z, [self.tiles] * len(z), order='C')
+            z = np.ravel_multi_index(z, [self.n_tiles] * len(z), order='C')
 
-        return z
-
-    def __call__(self, x):
-        return self.encode(x)
-
+        return np.array(z)
         
+    def decode(self, z):
+        """
+        Decode a discrete value into a continuous value.
+        """
+        assert type(z) == np.ndarray, 'z must be a numpy array.'
 
+        if self.single_idx:
+            z = np.unravel_index(z, [self.n_tiles] * len(self.bounds))
+            z = np.array(z)
+        z = z / self.n_tiles
+        z = z * (self.bounds[:, 1] - self.bounds[:, 0]) + self.bounds[:, 0]
+        return np.array(z)
 
 
 
 if __name__ == '__main__':
     bounds = np.array([[0,3], [0,2]])
     x = np.array([.79, .81])
-    n_tiles = 13
+    n_tiles = 10
 
-    tiling = TilingEncoder(bounds, n_tiles, False)
-    print(tiling.encode(x))
+    tiling = GridSpace(bounds, n_tiles, True)
+    encoding = tiling.encode(x)
+    decoding = tiling.decode(encoding)
 
-    tiling = TilingEncoder(bounds, n_tiles, True)
-    print(tiling.encode(x))
+    print('x:', x)
+    print('encoding:', encoding)
+    print('decoding:', decoding)
+
+    print("Domain", tiling.domain)
+    print("Codomain", tiling.codomain)
 
 
