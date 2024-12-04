@@ -1,4 +1,16 @@
 import numpy as np
+from functools import wraps
+
+
+
+def input_to_numpy(func):
+    """Decorator to ensure the input is converted to a NumPy array."""
+    @wraps(func)
+    def wrapper(self, x, *args, **kwargs):
+        # Convert input to a NumPy array
+        x = np.array(x)
+        return func(self, x, *args, **kwargs)
+    return wrapper
   
 
 class GridSpace:
@@ -24,22 +36,22 @@ class GridSpace:
 
         self.domain = self.bounds
         self.codomain = np.array([[0, n_tiles]] * len(bounds))
+        self.n_states = n_tiles ** len(bounds)
 
     def rescale(self, x):
         return (x - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
     
+    @input_to_numpy
     def encode(self, x):
         """
         Encode a continuous value into a discrete value.
         """
-        assert type(x) == np.ndarray, 'x must be a numpy array.'
 
         # Rescale
         y = self.rescale(x)
 
         # Bound
-        # y = np.clip(y, 0, 1)
-        y = (y % 1).round(8)
+        y = np.clip(y, 0, 1-1e-10)
 
         # Discretize
         z = (y * self.n_tiles).astype(int)
@@ -48,12 +60,12 @@ class GridSpace:
             z = np.ravel_multi_index(z, [self.n_tiles] * len(z), order='C')
 
         return np.array(z)
-        
+    
+    @input_to_numpy
     def decode(self, z):
         """
         Decode a discrete value into a continuous value.
         """
-        assert type(z) == np.ndarray, 'z must be a numpy array.'
 
         if self.single_idx:
             z = np.unravel_index(z, [self.n_tiles] * len(self.bounds))
@@ -65,11 +77,11 @@ class GridSpace:
 
 
 if __name__ == '__main__':
-    bounds = np.array([[0,3], [0,2]])
-    x = np.array([.79, .81])
+    bounds = np.array([[0,10], [0,10]])
+    x = np.array([3.3, 2.9])
     n_tiles = 10
 
-    tiling = GridSpace(bounds, n_tiles, True)
+    tiling = GridSpace(bounds, n_tiles, False)
     encoding = tiling.encode(x)
     decoding = tiling.decode(encoding)
 

@@ -13,12 +13,16 @@ class LearningAgent:
             epsilon_decay=0.97,
             min_epsilon=0.0,
             learning_rate=0.9,
+            learning_rate_decay=0.99995,
+            min_learning_rate=0.1,
             seed = 0
         ):
         self.env = env
         self.discount_factor = discount_factor
         self.seed = seed
         self.learning_rate = learning_rate
+        self.learning_rate_decay = learning_rate_decay
+        self.min_learning_rate = min_learning_rate
 
         # Epsilon-greedy parameters
         self.epsilon = initial_epsilon
@@ -51,6 +55,14 @@ class LearningAgent:
         # Linear decay over episodes
         epsilon = self.epsilon * self.epsilon_decay
         self.epsilon = max(self.min_epsilon, epsilon)
+
+    def update_learning_rate(self):
+        """
+        Update learning rate.
+        """
+        # Linear decay over episodes
+        learning_rate = self.learning_rate * self.learning_rate_decay
+        self.learning_rate = max(self.min_learning_rate, learning_rate)
 
 
     def learn(self, n_episodes=1000):
