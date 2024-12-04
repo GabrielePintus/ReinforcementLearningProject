@@ -59,6 +59,7 @@ class ActorNetwork(nn.Module):
 
         self.to(self.device)
 
+
     def forward(self, state):
         '''
         Forward pass of the network.
@@ -66,7 +67,7 @@ class ActorNetwork(nn.Module):
         return: the mean and standard deviation of the action distribution.
         '''
         
-        # Correct to use same network for both? Paper implies so
+        # # Correct to use same network for both? Paper implies so
 
         distr = self.fc1(state)
         distr = F.relu(distr)
@@ -75,12 +76,16 @@ class ActorNetwork(nn.Module):
 
         mu = self.mu(distr)
         sigma = self.sigma(distr)
+
         
+
         # Clamping the standard deviation to avoid numerical instability
         # Small diff from paper implementation, here we avoid 0 sigma. Check if it's correct
         # Could use directly a softplus (log(1+exp(x))) to ensure positive values
         # Also why 0,1 and not 0,2 or 0,3? To control exploration?
-        sigma = torch.clamp(sigma, min=self.reparam_noise, max=1)
+
+        sigma = torch.clamp(sigma, min=self.reparam_noise, max=10)
+
 
         return mu, sigma
 
@@ -92,6 +97,10 @@ class ActorNetwork(nn.Module):
         return: the action and the log probability of the action.
         '''
 
+        # print('state inside sample_normal: ', state)  
+        # print('mu inside sample_normal: ', self.forward(state)[0] )
+        # print('sigma inside sample normal: ', self.forward(state)[1])
+    
         mu, sigma = self.forward(state)
         probabilities = Normal(mu, sigma)
 
@@ -110,7 +119,9 @@ class ActorNetwork(nn.Module):
         log_probs = probabilities.log_prob(actions)
 
         # Need to better understand why we do this, check paper appendix...
-        log_probs = log_probs - torch.log(1-action.pow(2)+self.reparam_noise)
+        # Make sure it is never negative... or Nan explosion. For now tentative solution.
+        log_probs = log_probs - torch.log(torch.clamp(1 - action.pow(2), min=self.reparam_noise))
+
 
         log_probs = log_probs.sum(1, keepdim=True)
 

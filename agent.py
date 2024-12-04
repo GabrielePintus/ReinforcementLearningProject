@@ -1,5 +1,10 @@
 import gymnasium as gym
 import numpy as np
+import torch
+import torch.nn.functional as F
+import torch.nn as nn
+from replay_buffer import ReplayBuffer
+from networks import ActorNetwork, CriticNetwork, ValueNetwork
 from tqdm import tqdm
 
 
@@ -466,4 +471,234 @@ class QSpatialLambdaAgent(LearningAgent):
 
         return rewards
 
+def init_weights(m):
+    if isinstance(m, nn.Linear):  # Apply to linear layers
+        nn.init.xavier_uniform_(m.weight)  # Xavier initialization for weights
+        if m.bias is not None:  # Ensure bias exists before initializing
+            nn.init.zeros_(m.bias)
 
+class SACAgent(LearningAgent):
+    def __init__(
+            self, 
+            env, 
+            discount_factor = 0.99, 
+            initial_epsilon = None, 
+            epsilon_decay = None, 
+            min_epsilon = None, 
+            learning_rate = None, 
+            lr_actor = 3e-4, 
+            lr_critic_value = 3e-4, 
+            tau=0.005, 
+            max_size=1000000, 
+            batch_size=256, 
+            reward_scale=2,
+            seed=0
+        ):
+        '''
+        env: the environment to interact with.
+        discount_factor: the discount factor for future rewards.
+        learning_rate: the learning rate for the Q-value approximator.
+        lr_actor: the learning rate for the actor network.
+        lr_critic_value: the learning rate for the critic network and value network.
+        tau: the soft update parameter for the target networks.
+        max_size: the maximum size of the replay buffer.
+        batch_size: the batch size for training the networks.
+        reward_scale: the scaling factor for the rewards.
+        seed: the seed for reproducibility.
+        '''
+
+        super().__init__(env, discount_factor, initial_epsilon, epsilon_decay, min_epsilon, learning_rate, seed)
+
+        self.tau = tau
+        self.batch_size = batch_size
+        self.reward_scale = reward_scale
+
+        # Replay Buffer
+        self.memory = ReplayBuffer(max_size = max_size,
+                                   input_shape = [env.observation_space.shape[0]],
+                                   n_actions = env.action_space.shape[0])
+
+        # Actor-Critic Networks
+        self.actor = ActorNetwork(lr = lr_actor,
+                                  input_dim = [env.observation_space.shape[0]], 
+                                  n_actions = env.action_space.shape[0], 
+                                  hidden1_dim = 256,
+                                  hidden2_dim = 256, 
+                                  max_action=env.action_space.high,
+                                  name ='actor',
+                                  chkpt_dir = 'tmp/sac')
+        
+        self.critic_1 = CriticNetwork(lr = lr_critic_value,
+                                      input_dim = env.observation_space.shape[0], 
+                                      n_actions = env.action_space.shape[0],
+                                      hidden1_dim = 256,
+                                      hidden2_dim = 256,
+                                      name='critic_1',
+                                      chkpt_dir = 'tmp/sac')
+
+        self.critic_2 = CriticNetwork(lr = lr_critic_value,
+                                      input_dim = env.observation_space.shape[0], 
+                                      n_actions = env.action_space.shape[0], 
+                                      hidden1_dim = 256,
+                                      hidden2_dim = 256,
+                                      name='critic_2',
+                                      chkpt_dir = 'tmp/sac')
+
+        self.value = ValueNetwork(lr = lr_critic_value,
+                                  input_dim = [env.observation_space.shape[0]],
+                                  hidden1_dim = 256,
+                                  hidden2_dim = 256,
+                                  name='value',
+                                  chkpt_dir = 'tmp/sac')
+        
+        self.target_value = ValueNetwork(lr = lr_critic_value,
+                                         input_dim = [env.observation_space.shape[0]],
+                                         hidden1_dim = 256,
+                                         hidden2_dim = 256,
+                                         name = 'target_value',
+                                         chkpt_dir = 'tmp/sac')
+
+        self.update_network_parameters(tau=1)  # Initialize target network
+
+
+        self.actor.apply(init_weights)
+        self.critic_1.apply(init_weights)
+        self.critic_2.apply(init_weights)
+        self.value.apply(init_weights)
+        self.target_value.apply(init_weights)
+
+    def choose_action(self, state):
+        """
+        Overrides the epsilon-greedy behaviour policy to use the learned SAC policy.
+        """
+
+        state = torch.tensor([state], dtype=torch.float32).to(self.actor.device)
+        action, _ = self.actor.sample_normal(state, reparameterize=False)
+
+        return action.cpu().detach().numpy()[0]
+
+    def remember(self, state, action, reward, new_state, done):
+        """
+        Stores transitions in the replay buffer.
+        """
+        self.memory.store_transition(state, action, reward, new_state, done)
+
+    def update_network_parameters(self, tau=None):
+        """
+        Updates the target network parameters with soft updates.
+        """
+        if tau is None:
+            tau = self.tau
+
+        target_value_params = dict(self.target_value.named_parameters())
+        value_params = dict(self.value.named_parameters())
+
+        for name in value_params:
+            value_params[name] = tau * value_params[name].clone() + \
+                                 (1 - tau) * target_value_params[name].clone()
+
+        self.target_value.load_state_dict(value_params)
+
+    def learn(self, n_episodes=250):
+        """
+        Implements the SAC learning algorithm.
+        """
+        episode_rewards = []
+        avg_scores = []
+
+        for i in range(n_episodes):
+            state, _ = self.env.reset()
+            terminated = False
+            truncated = False
+            total_reward = 0
+
+            while not terminated and not truncated:
+                action = self.choose_action(state)
+
+                new_state, reward, terminated, truncated, _ = self.env.step(action)
+                total_reward += reward
+                self.remember(state, action, reward, new_state, terminated)
+
+                self._learn_step()
+
+                state = new_state
+
+            episode_rewards.append(total_reward)
+            avg_score = np.mean(episode_rewards[-100:])
+
+            avg_scores.append(avg_score)
+
+            print('episode ', i, 'total_reward %.1f' % total_reward, 'avg_reward %.1f' % avg_score)
+
+        return episode_rewards, avg_scores
+
+    def _learn_step(self):
+        """
+        Executes a single learning step (updates the actor and critic networks).
+        """
+        if self.memory.memory_counter < self.batch_size:
+            return
+
+        # Sample from replay buffer
+        states, actions, rewards, next_states, dones = self.memory.sample_buffer(self.batch_size)
+        rewards = torch.tensor(rewards, dtype=torch.float).to(self.actor.device)
+        dones = torch.tensor(dones).to(self.actor.device)
+        next_states = torch.tensor(next_states, dtype=torch.float).to(self.actor.device)
+        states = torch.tensor(states, dtype=torch.float).to(self.actor.device)
+        actions = torch.tensor(actions, dtype=torch.float).to(self.actor.device)
+
+        # Update Value Network
+        value = self.value(states).view(-1)
+        value_ = self.target_value(next_states).view(-1)
+        value_[dones] = 0.0
+
+        actions_pred, log_probs = self.actor.sample_normal(states, reparameterize=False)
+        log_probs = log_probs.view(-1)
+
+        q1_new_policy = self.critic_1(states, actions_pred)
+        q2_new_policy = self.critic_2(states, actions_pred)
+        critic_value = torch.min(q1_new_policy, q2_new_policy).view(-1)
+
+        self.value.optimizer.zero_grad()
+        value_target = critic_value - log_probs
+        value_loss = 0.5 * F.mse_loss(value, value_target)
+
+
+        value_loss.backward()
+        self.value.optimizer.step()
+
+        # Update Actor Network
+        actions_pred, log_probs = self.actor.sample_normal(states, reparameterize=True)
+        log_probs = log_probs.view(-1)
+
+        q1_new_policy = self.critic_1(states, actions_pred)
+        q2_new_policy = self.critic_2(states, actions_pred)
+        critic_value = torch.min(q1_new_policy, q2_new_policy).view(-1)
+
+        actor_loss = log_probs - critic_value
+        actor_loss = actor_loss.mean()
+
+        self.actor.optimizer.zero_grad()
+        actor_loss.backward()
+
+        self.actor.optimizer.step()
+
+        # Update Critic Networks
+        self.critic_1.optimizer.zero_grad()
+        self.critic_2.optimizer.zero_grad()
+
+        q_hat = self.reward_scale * rewards + self.discount_factor * value_
+        q1_old_policy = self.critic_1(states, actions).view(-1)
+        q2_old_policy = self.critic_2(states, actions).view(-1)
+
+        critic_1_loss = 0.5 * F.mse_loss(q1_old_policy, q_hat)
+        critic_2_loss = 0.5 * F.mse_loss(q2_old_policy, q_hat)
+
+        critic_loss = critic_1_loss + critic_2_loss
+        critic_loss.backward()
+
+        self.critic_1.optimizer.step()
+        self.critic_2.optimizer.step()
+
+        # Update target value network
+        self.update_network_parameters()

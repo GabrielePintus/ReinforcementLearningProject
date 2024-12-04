@@ -7,7 +7,7 @@ class ReplayBuffer():
     The ReplayBuffer object stores the agent's experiences in a buffer. The agent samples from this buffer to learn during training.
     '''
 
-    def __init__(self, max_size : int, input_shape : tuple, n_actions : int):
+    def __init__(self, max_size, input_shape, n_actions):
         '''
         Initializes the ReplayBuffer object.
         max_size: int, the maximum number of experiences the buffer can store.
@@ -20,20 +20,20 @@ class ReplayBuffer():
         self.memory_counter = 0
 
         # Initialize the memory arrays for the dynamics function
-        self.state_memory = np.zeros((self.mem_size, *input_shape))     # s_t
-        self.new_state_memory = np.zeros((self.mem_size, *input_shape)) # s_t+1
-        self.action_memory = np.zeros((self.mem_size, n_actions))       # a_t
-        self.reward_memory = np.zeros(self.mem_size)                    # r_t
+        self.state_memory = np.zeros((self.memory_size, *input_shape))     # s_t
+        self.new_state_memory = np.zeros((self.memory_size, *input_shape)) # s_t+1
+        self.action_memory = np.zeros((self.memory_size, n_actions))       # a_t
+        self.reward_memory = np.zeros(self.memory_size)                    # r_t
 
         # Boolean array to store whether the episode has ended
-        self.terminal_memory = np.zeros(self.mem_size, dtype=bool)
+        self.terminal_memory = np.zeros(self.memory_size, dtype=bool)
 
     
     def __str__(self):
         '''
         Returns the string representation of the ReplayBuffer object.
         '''
-        return f'ReplayBuffer(max_size={self.mem_size}, mem_cntr={self.mem_cntr})\n\n state_memory: {self.state_memory}\n\n new_state_memory: {self.new_state_memory}\n\n action_memory: {self.action_memory}\n\n reward_memory: {self.reward_memory}\n\n terminal_memory: {self.terminal_memory}'
+        return f'ReplayBuffer(max_size={self.memory_size}, memory_counter={self.memory_counter})\n\n state_memory: {self.state_memory}\n\n new_state_memory: {self.new_state_memory}\n\n action_memory: {self.action_memory}\n\n reward_memory: {self.reward_memory}\n\n terminal_memory: {self.terminal_memory}'
     
 
     def store_transition(self, state, action, reward, next_state, done):
@@ -67,7 +67,7 @@ class ReplayBuffer():
         '''
 
         # Ensure that we sample from the memory that has been filled
-        max_mem = min(self.mem_cntr, self.mem_size)
+        max_mem = min(self.memory_counter, self.memory_size)
 
         # Randomly sample experiences from the memory
         batch = np.random.choice(max_mem, batch_size)
