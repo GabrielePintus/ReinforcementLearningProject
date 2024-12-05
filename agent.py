@@ -6,7 +6,7 @@ import torch.nn as nn
 from replay_buffer import ReplayBuffer
 from networks import ActorNetwork, CriticNetwork, ValueNetwork
 from tqdm import tqdm
-
+import os
 
 class LearningAgent:
 
@@ -492,7 +492,9 @@ class SACAgent(LearningAgent):
             max_size=1000000, 
             batch_size=256, 
             reward_scale=2,
-            seed=0
+            seed=0,
+            save_weights = False,
+            load_weights = False
         ):
         '''
         env: the environment to interact with.
@@ -505,6 +507,8 @@ class SACAgent(LearningAgent):
         batch_size: the batch size for training the networks.
         reward_scale: the scaling factor for the rewards.
         seed: the seed for reproducibility.
+        save_weights: whether to save the networks' weights.
+        load_weights: whether to load the networks' weights.
         '''
 
         super().__init__(env, discount_factor, initial_epsilon, epsilon_decay, min_epsilon, learning_rate, seed)
@@ -512,6 +516,8 @@ class SACAgent(LearningAgent):
         self.tau = tau
         self.batch_size = batch_size
         self.reward_scale = reward_scale
+        self.save_weights = save_weights
+        self.load_weights = load_weights
 
         # Replay Buffer
         self.memory = ReplayBuffer(max_size = max_size,
@@ -603,16 +609,23 @@ class SACAgent(LearningAgent):
         """
         Implements the SAC learning algorithm.
         """
+
+        if(self.load_weights):
+            self.load_models()
+
         episode_rewards = []
         avg_scores = []
+        episode_steps = []
 
         for i in range(n_episodes):
             state, _ = self.env.reset()
             terminated = False
             truncated = False
             total_reward = 0
+            steps = 0
 
             while not terminated and not truncated:
+                    
                 action = self.choose_action(state)
 
                 new_state, reward, terminated, truncated, _ = self.env.step(action)
@@ -622,15 +635,19 @@ class SACAgent(LearningAgent):
                 self._learn_step()
 
                 state = new_state
+                steps += 1
 
             episode_rewards.append(total_reward)
-            avg_score = np.mean(episode_rewards[-100:])
-
+            avg_score = np.mean(episode_rewards[-25:])
+            episode_steps.append(steps)
             avg_scores.append(avg_score)
 
-            print('episode ', i, 'total_reward %.1f' % total_reward, 'avg_reward %.1f' % avg_score)
+            print('episode ', i, 'total_reward %.1f' % total_reward, 'avg_reward %.1f' % avg_score, 'steps', steps)
 
-        return episode_rewards, avg_scores
+        if(self.save_weights):
+            self.save_models()
+
+        return episode_rewards, avg_scores, episode_steps
 
     def _learn_step(self):
         """
@@ -702,3 +719,59 @@ class SACAgent(LearningAgent):
 
         # Update target value network
         self.update_network_parameters()
+
+    def save_models(self):
+        """
+        Save the actor and critic networks' parameters.
+        """
+
+        # check that the directory exists
+        if(not os.path.exists('tmp/sac')):
+            os.makedirs('tmp/sac')
+
+        self.actor.save_checkpoint()
+        self.critic_1.save_checkpoint()
+        self.critic_2.save_checkpoint()
+        self.value.save_checkpoint()
+        self.target_value.save_checkpoint()
+    
+    def load_models(self):
+        """
+        Load the actor and critic networks' parameters.
+        """
+
+        # check that the directory exists
+        if(not os.path.exists('tmp/sac')):
+            raise Exception("No weights to load. Please train the model first.")
+
+        try:
+            self.actor.load_checkpoint()
+            self.critic_1.load_checkpoint()
+            self.critic_2.load_checkpoint()
+            self.value.load_checkpoint()
+            self.target_value.load_checkpoint()
+        except:
+            raise Exception("Error loading weights. Please train the model first.")
+
+    def play(self, n_episodes=1, render = False):
+        """
+        Play the game using the learned policy.
+        """
+        
+        if(render):
+            self.env = self.env.unwrapped
+            self.env.render_mode = 'human'
+
+        rewards = []
+        for episode in range(n_episodes):
+            state, _ = self.env.reset()
+            done = False
+            total_reward = 0
+            while not done:
+                action = self.choose_action(state)
+                next_state, reward, done, _, _ = self.env.step(action)
+                total_reward += reward
+                state = next_state
+            rewards.append(total_reward)
+        self.env.close()
+        return rewards

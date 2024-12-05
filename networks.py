@@ -84,7 +84,7 @@ class ActorNetwork(nn.Module):
         # Could use directly a softplus (log(1+exp(x))) to ensure positive values
         # Also why 0,1 and not 0,2 or 0,3? To control exploration?
 
-        sigma = torch.clamp(sigma, min=self.reparam_noise, max=10)
+        sigma = torch.clamp(sigma, min=self.reparam_noise, max=1)
 
 
         return mu, sigma
