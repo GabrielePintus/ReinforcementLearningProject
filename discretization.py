@@ -1,5 +1,6 @@
 import numpy as np
 from functools import wraps
+import gymnasium as gym
 
 
 
@@ -76,20 +77,27 @@ class GridSpace:
 
 
 
-if __name__ == '__main__':
-    bounds = np.array([[0,10], [0,10]])
-    x = np.array([3.3, 2.9])
-    n_tiles = 10
-
-    tiling = GridSpace(bounds, n_tiles, False)
-    encoding = tiling.encode(x)
-    decoding = tiling.decode(encoding)
-
-    print('x:', x)
-    print('encoding:', encoding)
-    print('decoding:', decoding)
-
-    print("Domain", tiling.domain)
-    print("Codomain", tiling.codomain)
 
 
+class DiscretizeObservationWrapper(gym.ObservationWrapper):
+    def __init__(self, env, n_bins):
+        super().__init__(env)
+        self.n_bins = n_bins
+        assert len(n_bins) == env.observation_space.shape[0], "n_bins must match the observation dimensions."
+
+        # Create discretization grids for each observation dimension
+        low = env.observation_space.low
+        high = env.observation_space.high
+        self.discrete_bins = [
+            np.linspace(low[i], high[i], n_bins) for i, n_bins in enumerate(n_bins)
+        ]
+
+        # Compute the total number of discrete states
+        self.observation_space = gym.spaces.Discrete(np.prod(n_bins))
+
+    def observation(self, observation):
+        # Map continuous observations to discrete bins
+        discrete_obs = [
+            np.digitize(np.clip(observation[i], self.discrete_bins[i][0], self.discrete_bins[i][-1]), self.discrete_bins[i]) - 1 for i in range(len(self.n_bins))
+        ]
+        return np.ravel_multi_index(discrete_obs, self.n_bins)

@@ -1,10 +1,10 @@
-from agent import LearningAgent
+from Q_agents import LearningAgent
 import gymnasium as gym
 import numpy as np
 from tqdm.notebook import tqdm
 from collections import defaultdict
 
-from discretizer import GridSpace
+from discretization import GridSpace
 
 
 

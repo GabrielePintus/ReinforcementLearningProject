@@ -1,6 +1,6 @@
 import gymnasium as gym
 import numpy as np
-from tqdm import tqdm
+from tqdm.notebook import tqdm
 
 
 class LearningAgent:
@@ -65,7 +65,7 @@ class LearningAgent:
         self.learning_rate = max(self.min_learning_rate, learning_rate)
 
 
-    def learn(self, n_episodes=1000):
+    def learn(self):
         """
         Learn the optimal policy.
         """
@@ -120,7 +120,8 @@ class QAgent(LearningAgent):
         """
         rewards = []
         steps = 0
-        for _ in tqdm(range(n_episodes)):
+        progress_bar = tqdm(range(n_episodes), desc='Simulating')
+        for _ in progress_bar:
             state, _ = self.env.reset()
             done = False
             cum_reward = 0
@@ -145,6 +146,10 @@ class QAgent(LearningAgent):
                 steps += 1
             self.update_epsilon()
             rewards.append(cum_reward)
+            progress_bar.set_postfix({
+                'epsilon': self.epsilon,
+                'reward': np.mean(rewards[-10:])
+            })
 
         return rewards
     
@@ -177,7 +182,8 @@ class QLambdaAgent(LearningAgent):
         Learn the optimal policy.
         """
         rewards = []
-        for episode in tqdm(range(n_episodes)):
+        progress_bar = tqdm(range(n_episodes), desc='Simulating')
+        for episode in progress_bar:
             state, _ = self.env.reset()
             action = self.behaviour_policy(state)
             done = False
@@ -224,6 +230,10 @@ class QLambdaAgent(LearningAgent):
 
             self.update_epsilon()
             rewards.append(cum_reward)
+            progress_bar.set_postfix({
+                'epsilon': self.epsilon,
+                'reward': np.mean(rewards[-10:])
+            })
 
         return rewards
 
@@ -259,7 +269,8 @@ class QSpatialLambdaAgent(LearningAgent):
         Learn the optimal policy.
         """
         rewards = []
-        for episode in tqdm(range(n_episodes)):
+        progress_bar = tqdm(range(n_episodes), desc='Simulating')
+        for episode in progress_bar:
             state, _ = self.env.reset()
             action = self.behaviour_policy(state)
             done = False
@@ -299,7 +310,7 @@ class QSpatialLambdaAgent(LearningAgent):
                 self.eligibility_trace *= mask * self.discount_factor * self.trace_decay
                 
                 # Apply kernel spatial decay where the next action is not the best action
-                if next_action != next_best_action:
+                if next_action != next_best_action and np.sum(self.eligibility_trace) > 1e-3:
                     # Create a grid of state-action pairs
                     state_action_pairs = np.array(np.meshgrid(np.arange(self.q_values.shape[0]), np.arange(self.q_values.shape[1]))).T.reshape(-1, 2)
                     next_state_action = np.array([next_state, next_action])
@@ -322,6 +333,10 @@ class QSpatialLambdaAgent(LearningAgent):
 
             self.update_epsilon()
             rewards.append(cum_reward)
+            progress_bar.set_postfix({
+                'epsilon': self.epsilon,
+                'reward': np.mean(rewards[-10:])
+            })
 
         return rewards
 
