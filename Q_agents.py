@@ -2,6 +2,13 @@ import gymnasium as gym
 import numpy as np
 from tqdm.notebook import tqdm
 
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+from networks import Qnet
+from utils import ReplayBuffer
+
 
 class LearningAgent:
 
@@ -341,3 +348,151 @@ class QSpatialLambdaAgent(LearningAgent):
         return rewards
 
 
+
+class DQNAgent(LearningAgent):
+    
+    def __init__(
+        self,
+        env: gym.Env,
+        discount_factor=0.99,
+        initial_epsilon=0.5,
+        epsilon_decay=0.97,
+        min_epsilon=0.0,
+        learning_rate=0.9,
+        seed=0,
+        q_main : Qnet = None,
+        q_target : Qnet = None,
+        batch_size=64,
+        buffer_size=10_000,
+        intertia=0.99,
+    ):
+        super().__init__(
+            env,
+            discount_factor,
+            initial_epsilon,
+            epsilon_decay,
+            min_epsilon,
+            learning_rate,
+            seed
+        )
+        # Netowrks update params
+        self.intertia = intertia
+        
+        # Replay buffer
+        self.buffer = ReplayBuffer(batch_size, buffer_size)
+        
+        # Q-value approximator
+        self.q_main = q_main
+        self.q_target = q_target
+        
+    
+    def update_target(self):
+        """
+        Update the target network.
+        """
+        # Get the main and target weights
+        main_weights = self.q_main.state_dict()
+        target_weights = self.q_target.state_dict()
+        
+        # Compute and set the new target weights
+        target_weights = {
+            k: self.intertia * target_weights[k] + (1 - self.intertia) * main_weights[k]
+            for k in main_weights
+        }
+        self.q_target.load_state_dict(target_weights)
+        
+    def target_policy(self, state):
+        """
+        Choose the best action according to the target policy.
+        """
+        state = torch.tensor(state, dtype=torch.float32).to(self.q_target.device)
+        self.q_target.eval()
+        
+        q_values = np.zeros(self.env.action_space.n)
+        with torch.no_grad():
+            for action in range(self.env.action_space.n):
+                q_values[action] = self.q_target(state).detach().cpu().numpy()
+        
+        return np.argmax(q_values)
+    
+    
+    def train_main(self, gradient_steps=1):
+        losses = []
+        
+        for step in range(gradient_steps):
+            # Sample a batch of experiences
+            states, actions, rewards, next_states, dones = self.buffer.sample()
+            states       = torch.tensor(states, dtype=torch.float32).to(self.q_main.device)
+            actions      = torch.tensor(actions, dtype=torch.long).to(self.q_main.device)
+            rewards      = torch.tensor(rewards, dtype=torch.float32).to(self.q_main.device)
+            next_states  = torch.tensor(next_states, dtype=torch.float32).to(self.q_main.device)
+            dones        = torch.tensor(dones, dtype=torch.float32).to(self.q_main.device)
+            
+            with torch.no_grad():
+                # Compute next Q-values
+                next_q_values = self.q_target(next_states)
+                next_q_values, _ = torch.max(next_q_values, dim=1)
+                next_q_values = next_q_values.reshape(-1, 1)
+                # 1-step td target
+                target_q_values = rewards + (1-dones) * self.discount_factor * next_q_values
+                
+            # Get current Q-values estimates
+            current_q_values = self.q_main(states)
+            
+            # Compute the loss
+            current_q_values = current_q_values.gather(1, actions.unsqueeze(1))
+            
+            loss = F.smooth_l1_loss(current_q_values, target_q_values)
+            losses.append(loss.item())
+            
+            # Optimize the model
+            self.q_main.optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.q_main.parameters(), 10)
+            self.q_main.optimizer.step()
+            
+        return losses
+            
+            
+        
+    
+    
+    def learn(self, n_episodes=1000, horizon=10_000):
+        """
+        Learn the optimal policy.
+        """
+        rewards, losses = [], []
+        progress_bar = tqdm(range(n_episodes), desc='Simulating')
+        for episode in progress_bar:
+            state, _ = self.env.reset()
+            done = False
+            cum_reward = 0
+            steps = 0
+            episode_losses = []
+
+            while not done and steps < horizon:
+                # Sample action from the behaviour policy
+                action = self.behaviour_policy(state)
+
+                # Take action and observe reward and next state
+                next_state, reward, done, _, _ = self.env.step(action)
+                cum_reward += reward
+                
+                # Compute the Q-values
+                # best_action = self.target_policy(next_state)
+
+                # Store experience in the replay buffer
+                self.buffer.push(state, action, reward, next_state, done)
+                
+                # Train the Main Q-network
+                _losses = self.train_main()
+                episode_losses.append(np.mean(_losses))
+                
+            # Update the target network
+            self.update_target()
+            
+            self.update_epsilon()
+            rewards.append(cum_reward)
+            losses.append(episode_losses)
+        
+        return rewards, losses
