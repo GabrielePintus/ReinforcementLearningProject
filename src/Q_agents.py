@@ -6,8 +6,13 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from networks import Qnet
-from utils import ReplayBuffer
+from src.networks import Qnet
+from src.utils import ReplayBuffer
+
+    
+
+# Import defaultdict
+from collections import defaultdict
 
 
 class LearningAgent:
@@ -126,12 +131,13 @@ class QAgent(LearningAgent):
         Learn the optimal policy.
         """
         rewards = []
-        steps = 0
         progress_bar = tqdm(range(n_episodes), desc='Simulating')
+        total_steps = 0
         for _ in progress_bar:
             state, _ = self.env.reset()
             done = False
             cum_reward = 0
+            steps = 0
             while not done and steps < horizon:
                 # Sample action from the behaviour policy
                 action = self.behaviour_policy(state)
@@ -151,6 +157,7 @@ class QAgent(LearningAgent):
                 self.q_values[state, action] += delta * self.learning_rate
                 state = next_state
                 steps += 1
+            total_steps += steps
             self.update_epsilon()
             rewards.append(cum_reward)
             progress_bar.set_postfix({
@@ -158,8 +165,104 @@ class QAgent(LearningAgent):
                 'reward': np.mean(rewards[-10:])
             })
 
-        return rewards
-    
+        return rewards, total_steps
+
+
+class QAgentME(LearningAgent):
+    def __init__(
+        self,
+        env: gym.Env,
+        discount_factor=0.99,
+        initial_epsilon=0.5,
+        epsilon_decay=0.97,
+        min_epsilon=0.0,
+        learning_rate=0.9,
+        seed=0
+    ):
+        self.env = env
+        self.discount_factor = discount_factor
+        self.learning_rate = learning_rate
+        
+        # Epsilon-greedy parameters
+        self.epsilon = initial_epsilon
+        self.epsilon_decay = epsilon_decay
+        self.min_epsilon = min_epsilon
+
+        np.random.seed(seed)
+
+        # Q-value array (dense). If your state space is huge, you might want a dictionary here.
+        self.q_values = defaultdict(float)
+
+    def target_policy(self, state):
+        """
+        Choose the best action according to the Q-values.
+        """
+        return np.argmax(self.q_values[state])
+
+    def random_policy(self):
+        """
+        Choose a random action.
+        """
+        return self.env.action_space.sample()
+
+    def behaviour_policy(self, state):
+        """
+        Epsilon-greedy policy for exploration.
+        """
+        if np.random.rand() < self.epsilon:
+            return self.random_policy()
+        else:
+            return self.target_policy(state)
+
+    def update_epsilon(self):
+        """
+        Decay epsilon after each episode.
+        """
+        self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
+
+    def learn(self, n_episodes=1000, horizon=10_000):
+        """
+        Learn the optimal policy.
+        """
+        rewards = []
+        total_steps = 0
+        progress_bar = tqdm(range(n_episodes), desc='Simulating QAgent')
+
+        for _ in progress_bar:
+            state, _ = self.env.reset()
+            done = False
+            cum_reward = 0
+            steps = 0
+
+            while not done and steps < horizon:
+                # Epsilon-greedy action
+                action = self.behaviour_policy(state)
+
+                next_state, reward, done, _, _ = self.env.step(action)
+                cum_reward += reward
+
+                # Greedy action in the next state
+                next_action = self.target_policy(next_state)
+
+                # Q-update (TD(0) style)
+                td_target = reward + self.discount_factor * self.q_values[next_state, next_action]
+                td_error = td_target - self.q_values[state, action]
+                self.q_values[state, action] += self.learning_rate * td_error
+
+                state = next_state
+                steps += 1
+
+            total_steps += steps
+            self.update_epsilon()
+            rewards.append(cum_reward)
+            progress_bar.set_postfix({
+                'epsilon': self.epsilon,
+                'avg_reward_10': np.mean(rewards[-10:])
+            })
+
+        return rewards, total_steps
+
+
 
 
 
@@ -190,6 +293,7 @@ class QLambdaAgent(LearningAgent):
         """
         rewards = []
         progress_bar = tqdm(range(n_episodes), desc='Simulating')
+        total_steps = 0
         for episode in progress_bar:
             state, _ = self.env.reset()
             action = self.behaviour_policy(state)
@@ -235,6 +339,7 @@ class QLambdaAgent(LearningAgent):
                 action = next_action
                 steps += 1
 
+            total_steps += steps
             self.update_epsilon()
             rewards.append(cum_reward)
             progress_bar.set_postfix({
@@ -242,10 +347,141 @@ class QLambdaAgent(LearningAgent):
                 'reward': np.mean(rewards[-10:])
             })
 
-        return rewards
+        return rewards, total_steps
+    
+    
+    
+class QLambdaAgentME(LearningAgent):
+    def __init__(
+        self,
+        env: gym.Env,
+        discount_factor=0.99,
+        initial_epsilon=0.5,
+        epsilon_decay=0.97,
+        min_epsilon=0.0,
+        learning_rate=0.9,
+        seed=0,
+        trace_decay=0.9
+    ):
+        self.env = env
+        self.discount_factor = discount_factor
+        self.learning_rate = learning_rate
+        self.trace_decay = trace_decay
+        
+        # Epsilon-greedy parameters
+        self.epsilon = initial_epsilon
+        self.epsilon_decay = epsilon_decay
+        self.min_epsilon = min_epsilon
+        
+        np.random.seed(seed)
 
+        # Q-value approximator (dense). 
+        # For extremely large environments, consider a dictionary for Q as well.
+        self.q_values = np.zeros((env.observation_space.n, env.action_space.n))
 
+        # Eligibility trace: use a sparse dict {(state, action): float}
+        self.eligibility_trace = defaultdict(float)
 
+    def target_policy(self, state):
+        """Choose the best action from Q-values."""
+        return np.argmax(self.q_values[state])
+
+    def random_policy(self):
+        """Choose a random action."""
+        return self.env.action_space.sample()
+
+    def behaviour_policy(self, state):
+        """
+        Epsilon-greedy exploration.
+        """
+        if np.random.rand() < self.epsilon:
+            return self.random_policy()
+        else:
+            return self.target_policy(state)
+
+    def update_epsilon(self):
+        """
+        Decay epsilon after each episode.
+        """
+        self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
+
+    def learn(self, n_episodes=1000, horizon=10_000):
+        """
+        Learn the optimal policy using Q(lambda).
+        """
+        rewards = []
+        total_steps = 0
+        progress_bar = tqdm(range(n_episodes), desc='Simulating QLambda')
+
+        for _ in progress_bar:
+            state, _ = self.env.reset()
+            action = self.behaviour_policy(state)
+            done = False
+            cum_reward = 0
+            steps = 0
+
+            # Clear the eligibility trace dictionary at the start of each episode
+            self.eligibility_trace.clear()
+
+            while not done and steps < horizon:
+                next_state, reward, done, _, _ = self.env.step(action)
+                cum_reward += reward
+
+                next_action = self.behaviour_policy(next_state)
+                next_best_action = self.target_policy(next_state)
+
+                # TD error
+                td_target = reward + self.discount_factor * self.q_values[next_state, next_best_action]
+                delta = td_target - self.q_values[state, action]
+
+                # 1) Increment eligibility for (state, action)
+                self.eligibility_trace[(state, action)] += 1.0
+
+                # 2) [Optional] Normalization step (commented out, can be expensive)
+                #    If you really need it, do something like:
+                #
+                q_vals = np.array(list(self.eligibility_trace.values()))
+                q_min, q_max = np.min(q_vals), np.max(q_vals)
+                if q_max - q_min > 1e-3:
+                    for key in self.eligibility_trace:
+                        self.eligibility_trace[key] = (
+                            (self.eligibility_trace[key] - q_min) / (q_max - q_min)
+                        )
+
+                # 3) Update Q-values for all active traces
+                for (s, a) in list(self.eligibility_trace.keys()):
+                    self.q_values[s, a] += self.learning_rate * delta * self.eligibility_trace[(s, a)]
+
+                # 4) Decay the eligibility traces
+                #    - If next_action == next_best_action, we multiply by discount_factor * trace_decay
+                #    - Otherwise, we multiply by 0 (in Watkins' Q(lambda)) or do something else
+                #      as needed for your definition. The code below follows your "mask" approach:
+                factor = (1.0 if next_action == next_best_action else 0.0)
+                factor *= self.discount_factor * self.trace_decay
+
+                # Multiply all trace entries by factor
+                for (s, a) in list(self.eligibility_trace.keys()):
+                    self.eligibility_trace[(s, a)] *= factor
+                    # Optionally remove small traces
+                    if abs(self.eligibility_trace[(s, a)]) < 1e-5:
+                        del self.eligibility_trace[(s, a)]
+
+                state = next_state
+                action = next_action
+                steps += 1
+
+            total_steps += steps
+            self.update_epsilon()
+            rewards.append(cum_reward)
+
+            progress_bar.set_postfix({
+                'epsilon': self.epsilon,
+                'avg_reward_10': np.mean(rewards[-10:])
+            })
+
+        return rewards, total_steps    
+
+    
 
 
 class QSpatialLambdaAgent(LearningAgent):
@@ -346,6 +582,148 @@ class QSpatialLambdaAgent(LearningAgent):
             })
 
         return rewards
+
+
+
+class QSpatialLambdaAgentME(LearningAgent):
+    def __init__(
+        self,
+        env: gym.Env,
+        discount_factor=0.99,
+        initial_epsilon=0.5,
+        epsilon_decay=0.97,
+        min_epsilon=0.0,
+        learning_rate=0.9,
+        seed=0,
+        trace_decay=0.9,
+        kernel = lambda x, y : np.exp(-np.linalg.norm(x - y) ** 2)
+    ):
+        self.env = env
+        self.discount_factor = discount_factor
+        self.trace_decay = trace_decay
+        self.kernel = kernel
+
+        # Learning rate
+        self.learning_rate = learning_rate
+        
+        # Epsilon-greedy parameters
+        self.epsilon = initial_epsilon
+        self.epsilon_decay = epsilon_decay
+        self.min_epsilon = min_epsilon
+        
+        np.random.seed(seed)
+
+        # Q-value approximator (dense or dict—here we keep it dense for simplicity)
+        self.q_values = np.zeros((env.observation_space.n, env.action_space.n))
+
+        # SPARSE eligibility trace stored as a dictionary: { (state, action): float }
+        self.eligibility_trace = defaultdict(float)
+
+    def target_policy(self, state):
+        """Select action with the highest Q-value for the given state."""
+        return np.argmax(self.q_values[state])
+
+    def random_policy(self):
+        """Sample a random action."""
+        return self.env.action_space.sample()
+
+    def behaviour_policy(self, state):
+        """
+        Epsilon-greedy policy:
+         - with probability epsilon, pick a random action
+         - otherwise pick the best action from Q-values
+        """
+        if np.random.rand() < self.epsilon:
+            return self.random_policy()
+        else:
+            return self.target_policy(state)
+
+    def update_epsilon(self):
+        """Decay epsilon after each episode."""
+        self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
+
+    def learn(self, n_episodes=1000, horizon=10_000):
+        """
+        Learn the optimal policy.
+        """
+        rewards = []
+        progress_bar = tqdm(range(n_episodes), desc='Simulating')
+        total_steps = 0
+        for _ in progress_bar:
+            state, _ = self.env.reset()
+            action = self.behaviour_policy(state)
+            done = False
+            cum_reward = 0
+            steps = 0
+
+            # Clear dictionary at the start of each episode
+            self.eligibility_trace.clear()
+
+            while not done and steps < horizon:
+                next_state, reward, done, _, _ = self.env.step(action)
+                cum_reward += reward
+
+                next_action = self.behaviour_policy(next_state)
+                next_best_action = self.target_policy(next_state)
+
+                # TD target and TD error
+                target = reward + self.discount_factor * self.q_values[next_state, next_best_action]
+                delta = target - self.q_values[state, action]
+
+                # 1) Increment eligibility for (state, action)
+                self.eligibility_trace[(state, action)] += 1.0
+
+                # 2) [Optional] Normalize the eligibility_trace dictionary if needed
+                #    This is expensive, so do it only if essential.
+                min_val = min(self.eligibility_trace.values())
+                max_val = max(self.eligibility_trace.values())
+                if max_val - min_val > 1e-3:
+                    for key in self.eligibility_trace:
+                        self.eligibility_trace[key] = (
+                            (self.eligibility_trace[key] - min_val) / (max_val - min_val)
+                        )
+
+                # 3) Update Q-values for all active (s, a) in the eligibility trace
+                for (s, a) in list(self.eligibility_trace.keys()):
+                    self.q_values[s, a] += self.learning_rate * delta * self.eligibility_trace[(s, a)]
+
+                # 4) Decay the eligibility traces
+                #    - If next_action == next_best_action, multiply by discount_factor*trace_decay
+                #    - Otherwise, also apply the 'spatial kernel' factor
+                if next_action == next_best_action:
+                    # Simple case: multiply all by discount_factor * trace_decay
+                    for (s, a) in list(self.eligibility_trace.keys()):
+                        self.eligibility_trace[(s, a)] *= self.discount_factor * self.trace_decay
+                        # Optionally remove small traces
+                        if abs(self.eligibility_trace[(s, a)]) < 1e-5:
+                            del self.eligibility_trace[(s, a)]
+                else:
+                    # Harder case: multiply by discount_factor * trace_decay * kernel(...)
+                    # We'll compute the kernel factor for each (s,a) in the dict, not for the entire NxM space.
+                    for (s, a) in list(self.eligibility_trace.keys()):
+                        k = self.kernel(np.array([s, a]), np.array([next_state, next_action]))
+                        self.eligibility_trace[(s, a)] *= (self.discount_factor * self.trace_decay * k)
+                        if abs(self.eligibility_trace[(s, a)]) < 1e-5:
+                            del self.eligibility_trace[(s, a)]
+
+                # Move to next step
+                state = next_state
+                action = next_action
+                steps += 1
+
+            total_steps += steps
+            # Decay epsilon each episode
+            self.update_epsilon()
+            rewards.append(cum_reward)
+
+            # Update the progress bar with some stats
+            progress_bar.set_postfix({
+                'epsilon': self.epsilon,
+                'reward': np.mean(rewards[-10:])
+            })
+
+        return rewards, total_steps
+
 
 
 
