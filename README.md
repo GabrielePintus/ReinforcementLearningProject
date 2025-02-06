@@ -41,7 +41,7 @@ The best results were obtained with 15 cells for each dimension, so we kept it f
 
 ## Q lambda
 Q lambda is an extension of Q learning that uses eligibility traces to update the Q values. The eligibility trace is a vector that keeps track of the contribution of each state-action pair to the Q value estimate. We can also add a trace decay parameter lambda to give less credit to states that are further in the past.
-
+<img src="images/qlambdareturns.png" alt="Description" style="width:400px; height:300px;">
 
 ## Double Deep Q Learning
 As we can see, the approximation of the state space with a grid of cells does not yield good results on this continuous state space. To solve this problem we could use a function approximator that can better capture the continuous nature of the state space: a neural network.
