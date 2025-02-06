@@ -46,7 +46,7 @@ Q lambda is an extension of Q learning that uses eligibility traces to update th
 ## Double Deep Q Learning
 As we can see, the approximation of the state space with a grid of cells does not yield good results on this continuous state space. To solve this problem we could use a function approximator that can better capture the continuous nature of the state space: a neural network.
 
-
+<img src="images/DDQN.png" alt="Description" style="width:400px; height:300px;">
 
 ## Actor Critic
 In actor to critic aglorithms we have teo networks: the actor and the critic. The actor approximates the policy and decides which action to take, while the critic estimates the value function to evaluate the actor's decisions. The actor is updated using the policy gradient theorem, while the critic is updated using the temporal difference error.
