@@ -1,5 +1,5 @@
 # Secret
-
+*.pkl
 stable_baselines3/
 
 # Byte-compiled / optimized / DLL files
