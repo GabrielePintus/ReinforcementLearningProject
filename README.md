@@ -76,4 +76,4 @@ Proximal Policy Optimization (PPO) is a policy gradient algorithm that directly 
 - [Marta Lucas](https://github.com/15Max)
 - [Gabriele Pintus](https://github.com/GabrielePintus)
 
-Checkout our [presentation](presentation.pdf) for an overview of the project. #TODO: ADD correct link
+Check out our [presentation slides](presentation.pdf) for an overview of the project.
